@@ -23,10 +23,13 @@ class ShopMoreScreen extends StatelessWidget {
     );
   }
 
-  /// Leaves the staff area first, then signs out.
+  /// Signs out, then shows Browse. Sign out FIRST: while still signed in as
+  /// staff, the auth guard sends any customer page back to the Dashboard.
   Future<void> _signOut(BuildContext context) async {
-    context.go(RoutePaths.browse);
+    // Grab the router now; this screen is gone after signing out.
+    final router = GoRouter.of(context);
     await SessionController.instance.signOut();
+    router.go(RoutePaths.browse);
   }
 
   @override
