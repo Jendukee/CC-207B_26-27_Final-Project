@@ -1,0 +1,21 @@
+{
+  // F5 passes env.json to Flutter. Copy env.example.json to env.json first.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Orange 150 (debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--dart-define-from-file=env.json"]
+    },
+    {
+      "name": "Orange 150 (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "args": ["--dart-define-from-file=env.json"]
+    }
+  ]
+}
