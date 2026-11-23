@@ -2,15 +2,21 @@
 //
 // Rules:
 // 1. Until the saved session is loaded, everything waits on Splash.
-// 2. Splash -> `from` (if any) or the role's home:
+// 2. Splash -> `from` (if any, and only if it suits the role, see
+//    destinationFor) or the role's home:
 //      guest / customer -> Browse, staff / owner -> Dashboard.
 // 3. Guests opening a sign-in route (reserve, my bookings, confirmation,
 //    any /shop route) go to Login?from=<where they were going>, and are
 //    returned there after signing in.
 // 4. Customers cannot open /shop routes; they are sent to Browse.
-// 5. Signed-in users who open Login/Register are sent on to `from`/home.
+// 5. Signed-in users who open Login/Register are sent on to `from`/home
+//    (same role check as rule 2).
+// 6. Staff and owners stay on the staff screens (/shop: Dashboard,
+//    Calendar, Bookings, Inventory, More, Reports, checklists). Opening
+//    any customer page (Browse, Assistant, Profile, My Bookings, Reserve)
+//    sends them to the Dashboard.
 // Browse, item details, Assistant and the Profile tab stay open to guests
-// (the Profile tab shows a sign-in prompt for guests).
+// and customers (the Profile tab shows a sign-in prompt for guests).
 //
 // OWNER: team lead. Change only via a reviewed PR.
 
@@ -27,6 +33,17 @@ abstract final class AuthGuard {
   static String homeFor(AppUser? user) => (user?.role.isStaff ?? false)
       ? RoutePaths.staffHome
       : RoutePaths.customerHome;
+
+  /// Where to send [user] after sign-in or start-up. [from] is used only
+  /// when it suits the role: staff/owners return only to /shop pages
+  /// (otherwise their Dashboard), customers never to /shop pages.
+  static String destinationFor(AppUser? user, String? from) {
+    final safe = safeFrom(from);
+    if (safe == null) return homeFor(user);
+    final isStaffPath = _isUnder(Uri.parse(safe).path, RoutePaths.shopPrefix);
+    final isStaff = user?.role.isStaff ?? false;
+    return isStaff == isStaffPath ? safe : homeFor(user);
+  }
 
   /// Returns [from] only if it is an in-app path (prevents open redirects).
   static String? safeFrom(String? from) {
@@ -54,13 +71,15 @@ abstract final class AuthGuard {
     }
 
     // 2. Splash forwards to the right place once ready.
-    if (path == RoutePaths.splash) return from ?? homeFor(session.user);
+    if (path == RoutePaths.splash) {
+      return destinationFor(session.user, from);
+    }
 
     // 5. Already signed in: skip Login/Register.
     final isAuthPage =
         path == RoutePaths.login || path == RoutePaths.register;
     if (isAuthPage) {
-      return session.isSignedIn ? (from ?? homeFor(session.user)) : null;
+      return session.isSignedIn ? destinationFor(session.user, from) : null;
     }
 
     final needsStaff = _isUnder(path, RoutePaths.shopPrefix);
@@ -74,6 +93,9 @@ abstract final class AuthGuard {
 
     // 4. Customers cannot open staff routes.
     if (needsStaff && !session.isStaff) return RoutePaths.customerHome;
+
+    // 6. Staff and owners only use the staff screens.
+    if (session.isStaff && !needsStaff) return RoutePaths.staffHome;
 
     return null;
   }

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orange150_rental/core/router/auth_guard.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/shared/models/app_user.dart';
 import 'package:orange150_rental/shared/models/booking_status.dart';
 
 void main() {
@@ -51,5 +52,16 @@ void main() {
     expect(AuthGuard.safeFrom('https://evil.example'), isNull);
     expect(AuthGuard.safeFrom('//evil.example'), isNull);
     expect(AuthGuard.safeFrom('/login'), isNull);
+  });
+
+  test('auth guard sends staff to the Dashboard, not customer pages', () {
+    const staff = AppUser(id: 's1', role: UserRole.staff);
+    const customer = AppUser(id: 'c1', role: UserRole.customer);
+
+    expect(AuthGuard.destinationFor(staff, '/profile'), '/shop/dashboard');
+    expect(AuthGuard.destinationFor(staff, null), '/shop/dashboard');
+    expect(AuthGuard.destinationFor(staff, '/shop/bookings'), '/shop/bookings');
+    expect(AuthGuard.destinationFor(customer, '/my-bookings'), '/my-bookings');
+    expect(AuthGuard.destinationFor(customer, '/shop/dashboard'), '/browse');
   });
 }

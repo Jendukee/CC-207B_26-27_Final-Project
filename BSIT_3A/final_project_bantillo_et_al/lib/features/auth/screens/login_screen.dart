@@ -4,8 +4,9 @@
 //   opens a protected route, e.g. Reserve or My Bookings).
 // - `staffMode`: opened from the "Staff sign in" link on the guest
 //   Profile tab. Same form, but a non-staff account gets a notice.
-// After sign in the user goes to `from`, else their role's home
-// (customer -> Browse, staff/owner -> Dashboard).
+// After sign in the user goes to `from` if it suits their role, else their
+// role's home (customer -> Browse, staff/owner -> Dashboard). Staff who
+// sign in from a customer page (e.g. the Profile tab) go to the Dashboard.
 //
 // OWNER: team lead.
 
@@ -14,6 +15,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/auth_guard.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/features/auth/services/auth_service.dart';
@@ -67,13 +69,24 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _emailController.text,
         password: _passwordController.text,
       );
-      if (widget.staffMode && !(user?.role.isStaff ?? false)) {
+      if (SessionController.instance.roleLookupFailed) {
+        // Signed in, but the role could not be read, so the app falls back
+        // to the customer screens. Say so instead of failing silently.
+        messenger.showSnackBar(const SnackBar(
+          duration: Duration(seconds: 8),
+          content: Text('Signed in, but your account role could not be '
+              'loaded, so you are seeing the customer screens. Check your '
+              'connection, then sign out and sign in again.'),
+        ));
+      } else if (widget.staffMode && !(user?.role.isStaff ?? false)) {
         messenger.showSnackBar(const SnackBar(
           content: Text('This account does not have staff access. '
               'You are signed in as a customer.'),
         ));
       }
-      router.go(AuthGuard.safeFrom(widget.from) ?? AuthGuard.homeFor(user));
+      // Staff go to the Dashboard even if they signed in from a customer
+      // page such as the Profile tab (see AuthGuard.destinationFor).
+      router.go(AuthGuard.destinationFor(user, widget.from));
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = AuthService.friendlyError(error));

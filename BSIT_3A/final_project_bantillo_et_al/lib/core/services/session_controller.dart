@@ -28,6 +28,12 @@ class SessionController extends ChangeNotifier {
   bool _isReady = false;
   AppUser? _user;
   String? _loadedForUserId;
+  bool _roleLookupFailed = false;
+
+  /// True when the last attempt to read the user's role from `profiles`
+  /// failed (network error, missing table...). The user is then treated as
+  /// a customer, so the login screen warns about it.
+  bool get roleLookupFailed => _roleLookupFailed;
 
   /// True after the saved session (if any) and role have been loaded.
   bool get isReady => _isReady;
@@ -67,6 +73,7 @@ class SessionController extends ChangeNotifier {
     await SupabaseService.auth.signOut();
     _user = null;
     _loadedForUserId = null;
+    _roleLookupFailed = false;
     notifyListeners();
   }
 
@@ -94,6 +101,7 @@ class SessionController extends ChangeNotifier {
       final authUser = SupabaseService.auth.currentUser;
       targetId = authUser?.id;
       AppUser? loaded;
+      var failed = false;
       if (authUser != null) {
         Map<String, dynamic>? profile;
         try {
@@ -102,7 +110,12 @@ class SessionController extends ChangeNotifier {
               .select('id, full_name, phone, role')
               .eq('id', authUser.id)
               .maybeSingle();
+          if (profile == null) {
+            debugPrint('No profiles row for user ${authUser.id}; '
+                'treating them as a customer.');
+          }
         } catch (error) {
+          failed = true;
           debugPrint('Could not load role from profiles: $error');
         }
         loaded = AppUser.fromProfile(
@@ -113,6 +126,7 @@ class SessionController extends ChangeNotifier {
       }
       _user = loaded;
       _loadedForUserId = targetId;
+      _roleLookupFailed = failed;
       // Repeat if the user changed while we were waiting for the network.
     } while (SupabaseService.auth.currentUser?.id != targetId);
     notifyListeners();
