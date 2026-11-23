@@ -1,32 +1,25 @@
-// Return checklist: verify inclusions came back, record damage notes, photos
-// and any penalty amount, then mark the booking Returned.
+// Return checklist (return day): /shop/checklist/return/:bookingId.
+// Tick what came back (missing items may stay unticked), note condition
+// and damage, take photos, enter any penalty, then "Mark returned" moves
+// the booking to Returned and its items to Cleaning / Repair.
+// The form itself lives in checklist_screen.dart.
 //
-// OWNER: Member 3. Skeleton placeholder: replace the body with your own
-// implementation and keep this header comment up to date.
+// OWNER: Member 3.
 
 import 'package:flutter/material.dart';
 
-/// Placeholder for the "Return Checklist" screen (see the file header for the plan).
+import 'package:orange150_rental/features/checklist/models/checklist_kind.dart';
+import 'package:orange150_rental/features/checklist/screens/checklist_screen.dart';
+
+/// The "Return Checklist" screen.
 class ReturnChecklistScreen extends StatelessWidget {
-  /// Creates the "Return Checklist" screen for the given [bookingId].
+  /// Creates the screen for the given [bookingId].
   const ReturnChecklistScreen({super.key, required this.bookingId});
 
   /// Path parameter from the route (see checklist_routes.dart).
   final String bookingId;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Return Checklist')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'TODO: Member 3 builds this\n(bookingId: $bookingId)',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      ChecklistScreen(bookingId: bookingId, kind: ChecklistKind.returned);
 }
