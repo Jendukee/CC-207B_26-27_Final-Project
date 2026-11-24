@@ -25,6 +25,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
@@ -499,6 +500,8 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         TextFormField(
           controller: _penalty,
           enabled: !_saving,
+          // UI audit #16: digits and one decimal point (max 2 decimals).
+          inputFormatters: Validators.moneyFormatters,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: const InputDecoration(
