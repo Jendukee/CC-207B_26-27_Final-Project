@@ -6,7 +6,7 @@
 //   * profiles: full_name, phone and (only when the customer ticks "Save
 //     this address to my profile") address
 //   * measurements: upsert, with consent
-//   * bookings + booking_items: ONLY through create_reservation (0011)
+//   * bookings + booking_items: ONLY through create_reservation (0012)
 //
 // OWNER: Member 2.
 
@@ -128,16 +128,17 @@ class ReservationService {
   /// Creates a pending booking with its item and its signed e-contract.
   ///
   /// Everything happens in ONE database function, create_reservation
-  /// (0011_econtract.sql): it takes the price from the items table, checks
-  /// the dates, the signature (typed name = profile name) and the terms,
-  /// sets the payment deadline and inserts the booking and its item
-  /// together.
+  /// (0012_booking_full_name.sql): it takes the price from the items table,
+  /// checks the dates, the signature (typed name = [fullName], the name
+  /// from Card 1, ignoring case and extra spaces) and the terms, sets the
+  /// payment deadline and inserts the booking and its item together.
   Future<Booking> submitReservation({
     required String itemId,
     required DateTime eventDate,
     required PaymentOption paymentOption,
     required Map<String, dynamic> measurementsSnapshot,
     required String termsVersion,
+    required String fullName,
     required String signedName,
     required DateTime termsAcknowledgedAt,
     required Map<String, dynamic> termsSnapshot,
@@ -148,31 +149,68 @@ class ReservationService {
     String? notes,
   }) async {
     _requireUserId();
-    String? orNull(String? value) =>
-        (value ?? '').trim().isEmpty ? null : value!.trim();
     final row = await _client.rpc<Map<String, dynamic>>(
       'create_reservation',
-      params: {
-        'p_item_id': itemId,
-        'p_event_date': _dateFormat.format(eventDate),
-        'p_payment_option': paymentOption.dbValue,
-        'p_measurements': measurementsSnapshot,
-        'p_terms_version': termsVersion,
-        'p_signed_name': signedName.trim(),
-        'p_terms_acknowledged_at': termsAcknowledgedAt
-            .toUtc()
-            .toIso8601String(),
-        'p_terms_snapshot': termsSnapshot,
-        'p_customer_address': orNull(address),
-        'p_facebook_account': orNull(facebook),
-        'p_preferred_fitting_date': fittingDate == null
-            ? null
-            : _dateFormat.format(fittingDate),
-        'p_notes': orNull(notes),
-        'p_preferred_payment_method': paymentMethod.dbValue,
-      },
+      params: reservationParams(
+        itemId: itemId,
+        eventDate: eventDate,
+        paymentOption: paymentOption,
+        measurementsSnapshot: measurementsSnapshot,
+        termsVersion: termsVersion,
+        fullName: fullName,
+        signedName: signedName,
+        termsAcknowledgedAt: termsAcknowledgedAt,
+        termsSnapshot: termsSnapshot,
+        paymentMethod: paymentMethod,
+        address: address,
+        facebook: facebook,
+        fittingDate: fittingDate,
+        notes: notes,
+      ),
     );
     return Booking.fromMap(row);
+  }
+
+  /// The create_reservation arguments. A separate pure function (fix before
+  /// Phase 3) so a test can check that Card 1's [fullName] is sent as
+  /// p_customer_full_name, the name the database checks the signature
+  /// against.
+  static Map<String, dynamic> reservationParams({
+    required String itemId,
+    required DateTime eventDate,
+    required PaymentOption paymentOption,
+    required Map<String, dynamic> measurementsSnapshot,
+    required String termsVersion,
+    required String fullName,
+    required String signedName,
+    required DateTime termsAcknowledgedAt,
+    required Map<String, dynamic> termsSnapshot,
+    required PlannedPaymentMethod paymentMethod,
+    String? address,
+    String? facebook,
+    DateTime? fittingDate,
+    String? notes,
+  }) {
+    String? orNull(String? value) =>
+        (value ?? '').trim().isEmpty ? null : value!.trim();
+    return {
+      'p_item_id': itemId,
+      'p_event_date': _dateFormat.format(eventDate),
+      'p_payment_option': paymentOption.dbValue,
+      'p_measurements': measurementsSnapshot,
+      'p_terms_version': termsVersion,
+      'p_signed_name': signedName.trim(),
+      'p_terms_acknowledged_at': termsAcknowledgedAt.toUtc().toIso8601String(),
+      'p_terms_snapshot': termsSnapshot,
+      'p_customer_full_name': fullName.trim(),
+      'p_customer_address': orNull(address),
+      'p_facebook_account': orNull(facebook),
+      'p_preferred_fitting_date': fittingDate == null
+          ? null
+          : _dateFormat.format(fittingDate),
+      'p_notes': orNull(notes),
+      'p_preferred_payment_method': paymentMethod.dbValue,
+    };
   }
 
   /// Loads a booking for the confirmation screen.
