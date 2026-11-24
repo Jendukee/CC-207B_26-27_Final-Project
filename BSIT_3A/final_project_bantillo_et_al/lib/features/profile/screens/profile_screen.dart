@@ -1,10 +1,18 @@
 // Profile tab for customer contact details, measurements and privacy.
+//
+// UI audit changes: errors are plain language (friendlyErrorMessage, #12),
+// Sign out asks first and is styled as destructive (#17), and dates use
+// the shared Formatters (#23).
+//
+// OWNER: Member 2.
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/services/session_controller.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/sign_in_prompt.dart';
 import 'package:orange150_rental/features/profile/models/data_deletion_request.dart';
 import 'package:orange150_rental/features/profile/models/profile_data.dart';
@@ -81,7 +89,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _refresh();
       _showMessage('Contact details updated.');
     } catch (error) {
-      _showMessage('Could not update contact details: $error');
+      _showMessage(
+        friendlyErrorMessage(
+          error,
+          fallback: 'Could not update contact details. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -101,7 +114,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _refresh();
       _showMessage('Measurements saved.');
     } catch (error) {
-      _showMessage('Could not save measurements: $error');
+      _showMessage(
+        friendlyErrorMessage(
+          error,
+          fallback: 'Could not save measurements. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -143,7 +161,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         consented ? 'Privacy consent recorded.' : 'Privacy consent withdrawn.',
       );
     } catch (error) {
-      _showMessage('Could not update privacy consent: $error');
+      _showMessage(
+        friendlyErrorMessage(
+          error,
+          fallback: 'Could not update privacy consent. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -198,18 +221,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _refreshDeletionRequest();
       _showMessage('Your data deletion request was sent for review.');
     } catch (error) {
-      _showMessage('Could not submit deletion request: $error');
+      _showMessage(
+        friendlyErrorMessage(
+          error,
+          fallback: 'Could not send the deletion request. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  /// UI audit #17: asks before signing out (a destructive action).
   Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'You will need to sign in again to reserve or see your bookings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Stay signed in'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.deepRed),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
     setState(() => _busy = true);
     try {
       await SessionController.instance.signOut();
     } catch (error) {
-      _showMessage('Could not sign out: $error');
+      _showMessage(
+        friendlyErrorMessage(
+          error,
+          fallback: 'Could not sign out. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -255,7 +311,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
               if (snapshot.hasError) {
                 return _ProfileLoadError(
-                  message: 'Could not load your profile: ${snapshot.error}',
+                  message: friendlyErrorMessage(
+                    snapshot.error!,
+                    fallback: 'Could not load your profile. Please try again.',
+                  ),
                   onRetry: _refresh,
                 );
               }
@@ -268,7 +327,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _profileContent(ProfileData profile) {
-    final dateFormat = DateFormat.yMMMd().add_jm();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -348,7 +406,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Updated ${dateFormat.format(profile.measurements!.updatedAt!)}',
+                      'Updated ${Formatters.dateTime(profile.measurements!.updatedAt!)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
@@ -373,7 +431,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 title: const Text('Privacy consent'),
                 subtitle: Text(
                   profile.hasPrivacyConsent
-                      ? 'Consent recorded ${dateFormat.format(profile.privacyConsentAt!)}.'
+                      ? 'Consent recorded ${Formatters.dateTime(profile.privacyConsentAt!)}.'
                       : 'Consent is currently withdrawn.',
                 ),
               ),
@@ -394,6 +452,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _deletionRequestSection(),
         const SizedBox(height: 8),
         OutlinedButton.icon(
+          // Red: destructive action (same style as staff Cancel booking).
+          style: OutlinedButton.styleFrom(foregroundColor: AppColors.deepRed),
           onPressed: _busy ? null : _signOut,
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
@@ -419,10 +479,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return Card(
             child: ListTile(
               title: const Text('Data deletion request'),
-              subtitle: Text(
-                'Could not load requests. Run migration '
-                '0007_data_deletion_requests.sql in Supabase and retry.\n'
-                '${snapshot.error}',
+              // No raw error text for customers; Retry is on the right.
+              subtitle: const Text(
+                'Could not load your deletion request. Please try again.',
               ),
               trailing: IconButton(
                 tooltip: 'Retry',
@@ -435,7 +494,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         final request = snapshot.data;
         if (request != null) {
-          final created = DateFormat.yMMMd().format(request.createdAt);
+          final created = Formatters.date(request.createdAt);
           return Card(
             child: ListTile(
               title: const Text('Data deletion request'),
