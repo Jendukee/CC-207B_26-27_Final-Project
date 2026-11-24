@@ -273,17 +273,23 @@ class _ShopCalendarScreenState extends State<ShopCalendarScreen> {
           selected: {_format},
           onSelectionChanged: (s) => setState(() => _format = s.first),
         ),
-        // SegmentedButton needs non-null values, so "all" is a string key.
-        SegmentedButton<String>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: 'all', label: Text('All')),
-            ButtonSegment(value: 'gown', label: Text('Gowns')),
-            ButtonSegment(value: 'suit', label: Text('Suits')),
+        // Category filter: All plus every item type (gown, long gown, suit,
+        // bearer since migration 0010). Chips wrap on narrow phones.
+        Wrap(
+          spacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('All'),
+              selected: _filter.type == null,
+              onSelected: (_) => _setType(null),
+            ),
+            for (final type in ItemType.values)
+              ChoiceChip(
+                label: Text(type.label),
+                selected: _filter.type == type,
+                onSelected: (_) => _setType(type),
+              ),
           ],
-          selected: {_filter.type?.dbValue ?? 'all'},
-          onSelectionChanged: (s) =>
-              _setType(s.first == 'all' ? null : ItemType.fromDb(s.first)),
         ),
         SizedBox(
           width: 280,
