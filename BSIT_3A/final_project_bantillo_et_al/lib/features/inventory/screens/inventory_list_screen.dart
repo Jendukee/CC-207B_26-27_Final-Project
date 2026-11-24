@@ -2,19 +2,26 @@
 //
 // UI audit changes: retired items can be reached (#10), errors are plain
 // language (#12), the condition chip uses readable AppColors with white
-// text (#19), long descriptions no longer overflow the card (#22), and
-// prices use the shared Formatters (#23).
+// text (#19), long descriptions no longer overflow the card (#22), prices
+// use the shared Formatters (#23), shared Loading/Error/Empty views (#28),
+// a labelled search field (#29), condition chips, go_router navigation to
+// the item form and room for the Add Item button (#30).
 //
 // OWNER: Member 1.
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/empty_view.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
+import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
-import 'package:orange150_rental/shared/models/item.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
-import 'package:orange150_rental/features/inventory/screens/item_form_screen.dart';
+import 'package:orange150_rental/shared/models/item.dart';
 
 /// Staff inventory management screen.
 class InventoryListScreen extends StatefulWidget {
@@ -97,10 +104,15 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
     }).toList();
   }
 
+  /// Opens the item form through go_router (UI audit #30), so the address
+  /// bar and Back work like everywhere else:
+  ///   /shop/inventory/new  or  /shop/inventory/:itemId/edit
   Future<void> _openForm({String? itemId}) async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => ItemFormScreen(itemId: itemId)));
+    await context.push(
+      itemId == null
+          ? '${RoutePaths.inventory}/new'
+          : '${RoutePaths.inventory}/$itemId/edit',
+    );
 
     if (!mounted) return;
     await _loadItems();
@@ -216,63 +228,33 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
   }
 
   Widget _buildBody() {
+    // UI audit #28: the shared loading, error (Retry) and empty views.
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingView(message: 'Loading inventory...');
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 48),
-              const SizedBox(height: 12),
-              const Text(
-                'Unable to load inventory.',
-                style: TextStyle(fontSize: 18),
-              ),
-              const SizedBox(height: 8),
-              Text(_errorMessage!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadItems, child: const Text('Retry')),
-            ],
-          ),
-        ),
+      return ErrorView(
+        message: 'Unable to load inventory. $_errorMessage',
+        onRetry: _loadItems,
       );
     }
 
     final filteredItems = _filteredItems;
 
     if (filteredItems.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.checkroom_outlined,
-                size: 64,
-                color: Colors.grey.shade500,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _items.isEmpty
-                    ? 'No inventory items yet.'
-                    : 'No items match your search.',
-                style: const TextStyle(fontSize: 18),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Add an item or adjust your search and filter.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+      return EmptyView(
+        icon: Icons.checkroom_outlined,
+        message: _items.isEmpty
+            ? 'No inventory items yet. Add your first gown or suit.'
+            : 'No items match your search or filter.',
+        actionLabel: _items.isEmpty ? 'Add item' : 'Show all items',
+        onAction: _items.isEmpty
+            ? () => _openForm()
+            : () {
+                _searchController.clear();
+                setState(() => _selectedCondition = null);
+              },
       );
     }
 
@@ -291,7 +273,9 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
               : 1;
 
           return GridView.builder(
-            padding: const EdgeInsets.all(16),
+            // Extra bottom space so the Add Item button never covers the
+            // last card (UI audit #30).
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
               crossAxisSpacing: 16,
@@ -329,7 +313,9 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
               controller: _searchController,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: 'Search inventory...',
+                // UI audit #29: a visible label, not a placeholder only.
+                labelText: 'Search inventory',
+                hintText: 'Name, type, size or age group',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -346,33 +332,27 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: DropdownButtonFormField<ItemCondition?>(
-              initialValue: _selectedCondition,
-              decoration: InputDecoration(
-                labelText: 'Filter by condition',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              items: [
-                const DropdownMenuItem<ItemCondition?>(
-                  value: null,
-                  child: Text('All active items'),
-                ),
-                ...ItemCondition.values.map(
-                  (condition) => DropdownMenuItem<ItemCondition?>(
-                    value: condition,
-                    child: Text(condition.label),
+          // UI audit #30: a single-choice filter with 4 options is shown
+          // as chips (one tap, all options visible) instead of a dropdown.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                for (final condition in <ItemCondition?>[
+                  null,
+                  ...ItemCondition.values,
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(condition?.label ?? 'All active items'),
+                      selected: _selectedCondition == condition,
+                      onSelected: (_) =>
+                          setState(() => _selectedCondition = condition),
+                    ),
                   ),
-                ),
               ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedCondition = value;
-                });
-              },
             ),
           ),
           Expanded(child: _buildBody()),
