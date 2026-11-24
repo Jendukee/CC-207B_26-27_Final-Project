@@ -72,17 +72,25 @@ class _LoginScreenState extends State<LoginScreen> {
       if (SessionController.instance.roleLookupFailed) {
         // Signed in, but the role could not be read, so the app falls back
         // to the customer screens. Say so instead of failing silently.
-        messenger.showSnackBar(const SnackBar(
-          duration: Duration(seconds: 8),
-          content: Text('Signed in, but your account role could not be '
+        messenger.showSnackBar(
+          const SnackBar(
+            duration: Duration(seconds: 8),
+            content: Text(
+              'Signed in, but your account role could not be '
               'loaded, so you are seeing the customer screens. Check your '
-              'connection, then sign out and sign in again.'),
-        ));
+              'connection, then sign out and sign in again.',
+            ),
+          ),
+        );
       } else if (widget.staffMode && !(user?.role.isStaff ?? false)) {
-        messenger.showSnackBar(const SnackBar(
-          content: Text('This account does not have staff access. '
-              'You are signed in as a customer.'),
-        ));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This account does not have staff access. '
+              'You are signed in as a customer.',
+            ),
+          ),
+        );
       }
       // Staff go to the Dashboard even if they signed in from a customer
       // page such as the Profile tab (see AuthGuard.destinationFor).
@@ -120,9 +128,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _emailController,
                       decoration: const InputDecoration(
-                        labelText: 'Email',
+                        labelText: 'Email *',
                         prefixIcon: Icon(Icons.email_outlined),
                       ),
                       keyboardType: TextInputType.emailAddress,
@@ -132,19 +142,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _passwordController,
                       decoration: InputDecoration(
-                        labelText: 'Password',
+                        labelText: 'Password *',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
                               ? 'Show password'
                               : 'Hide password',
-                          icon: Icon(_obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                       obscureText: _obscurePassword,
@@ -209,8 +224,10 @@ class _ErrorBanner extends StatelessWidget {
           const Icon(Icons.error_outline, color: AppColors.deepRed),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(message,
-                style: const TextStyle(color: AppColors.deepRed)),
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.deepRed),
+            ),
           ),
         ],
       ),

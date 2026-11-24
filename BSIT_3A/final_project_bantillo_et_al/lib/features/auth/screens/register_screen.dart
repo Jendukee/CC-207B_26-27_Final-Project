@@ -151,9 +151,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _nameController,
                       decoration: const InputDecoration(
-                        labelText: 'Full name',
+                        labelText: 'Full name *',
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                       textCapitalization: TextCapitalization.words,
@@ -164,9 +166,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _emailController,
                       decoration: const InputDecoration(
-                        labelText: 'Email',
+                        labelText: 'Email *',
                         prefixIcon: Icon(Icons.email_outlined),
                       ),
                       keyboardType: TextInputType.emailAddress,
@@ -183,9 +187,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _passwordController,
                       decoration: InputDecoration(
-                        labelText: 'Password',
+                        labelText: 'Password *',
                         helperText: 'At least 8 characters',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
@@ -209,13 +215,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _confirmController,
                       decoration: const InputDecoration(
-                        labelText: 'Confirm password',
+                        labelText: 'Confirm password *',
                         prefixIcon: Icon(Icons.lock_outline),
                       ),
                       obscureText: _obscurePassword,
                       textInputAction: TextInputAction.done,
+                      // The last field submits the form (UI audit #26).
+                      onFieldSubmitted: (_) => _submit(),
                       validator: (v) => v != _passwordController.text
                           ? 'Passwords do not match.'
                           : null,
