@@ -10,6 +10,14 @@
 // * Pull to refresh reloads every card.
 // * Phones: one column. Wide screens (>= 840 px): a 2-column grid.
 //
+// Shop-side redesign (Phase 2), the customer side's look:
+// * light grey page with white rounded cards
+// * summary tiles first (icon, count, label, "View"): 2 per row on phones,
+//   3 from 600 px, all 5 in one row from 1000 px (H1, H6, H7)
+// * then the alert lists in the My Bookings card style, with skeletons
+//   while loading (H1, H4)
+// The data, the five sections and every link are unchanged.
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -23,6 +31,7 @@ import 'package:orange150_rental/features/shop_dashboard/models/dashboard_bookin
 import 'package:orange150_rental/features/shop_dashboard/models/dashboard_section.dart';
 import 'package:orange150_rental/features/shop_dashboard/services/shop_dashboard_service.dart';
 import 'package:orange150_rental/features/shop_dashboard/widgets/dashboard_section_card.dart';
+import 'package:orange150_rental/features/shop_dashboard/widgets/dashboard_summary_tile.dart';
 
 /// The staff "Dashboard" screen.
 class ShopDashboardScreen extends StatefulWidget {
@@ -77,6 +86,9 @@ class _ShopDashboardScreenState extends State<ShopDashboardScreen> {
   Widget build(BuildContext context) {
     final name = SessionController.instance.user?.fullName;
     return Scaffold(
+      // Light grey page so the white cards stand out (as on the customer
+      // side).
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(
         title: 'Dashboard',
@@ -109,12 +121,42 @@ class _ShopDashboardScreenState extends State<ShopDashboardScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
+                _summaryGrid(constraints.maxWidth - 32),
+                const SizedBox(height: 16),
                 if (twoColumns) ..._pairs(cards) else ...cards,
               ],
             );
           },
         ),
       ),
+    );
+  }
+
+  /// The summary tiles, in rows of 2, 3 or 5 depending on [width].
+  Widget _summaryGrid(double width) {
+    final perRow = width >= 1000
+        ? 5
+        : width >= 600
+        ? 3
+        : 2;
+    const gap = 8.0;
+    final tileWidth = (width - gap * (perRow - 1)) / perRow;
+    return Wrap(
+      spacing: gap,
+      runSpacing: gap,
+      children: [
+        for (final section in DashboardSection.values)
+          SizedBox(
+            width: tileWidth,
+            child: DashboardSummaryTile(
+              section: section,
+              future: _futures[section]!,
+              // Bookings tab, filtered (path only, no shop_bookings import).
+              onView: () =>
+                  context.go(DashboardDates.bookingsLink(section, _now)),
+            ),
+          ),
+      ],
     );
   }
 

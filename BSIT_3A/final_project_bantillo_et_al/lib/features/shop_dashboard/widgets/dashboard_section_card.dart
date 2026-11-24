@@ -1,6 +1,13 @@
-// One dashboard card: a count, a title and the list of bookings under it.
-// It shows its own loading, empty and error (with Retry) states, so one
-// failing section does not hide the others.
+// One dashboard alert list: the section title, then its bookings. It shows
+// its own loading, empty and error (with Retry) states, so one failing
+// section does not hide the others.
+//
+// Shop-side redesign (Phase 2): the same look as the customer side. The
+// list sits in a white SectionCard with a "View all" link in its heading,
+// each booking is a small card like My Bookings (reference + StatusChip on
+// top, customer and the detail line below), and loading shows grey
+// skeleton cards instead of a spinner (H1, H4). The count moved to the
+// summary tiles at the top of the screen.
 //
 // Display only: the screen passes in the Future (from the service) and
 // decides what tapping does.
@@ -10,15 +17,15 @@
 import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/theme/app_colors.dart';
-import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
-import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/list_skeleton.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
 import 'package:orange150_rental/features/shop_dashboard/models/dashboard_booking.dart';
 import 'package:orange150_rental/features/shop_dashboard/models/dashboard_section.dart';
 import 'package:orange150_rental/features/shop_dashboard/services/shop_dashboard_service.dart';
 
-/// A summary card with an alert list.
+/// An alert list for one dashboard section.
 class DashboardSectionCard extends StatelessWidget {
   /// Creates the card.
   const DashboardSectionCard({
@@ -55,35 +62,47 @@ class DashboardSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return SectionCard(
+      title: section.title,
+      icon: section.icon,
       margin: const EdgeInsets.only(bottom: 12),
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      trailing: TextButton(
+        onPressed: onOpenList,
+        child: const Text('View all'),
+      ),
       child: FutureBuilder<List<DashboardBooking>>(
         future: future,
         builder: (context, snapshot) {
-          final loading = snapshot.connectionState != ConnectionState.done;
-          final bookings = snapshot.data ?? const <DashboardBooking>[];
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const ListSkeleton(
+              count: 2,
+              showPhoto: false,
+              padding: EdgeInsets.only(right: 8),
+            );
+          }
+          if (snapshot.hasError) {
+            return ErrorView(
+              message: snapshot.error is DashboardException
+                  ? (snapshot.error! as DashboardException).message
+                  : 'Could not load this section. Please try again.',
+              onRetry: onRetry,
+            );
+          }
+          final bookings = snapshot.requireData;
+          if (bookings.isEmpty) return _empty(context);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _header(context, loading || snapshot.hasError ? null : bookings),
-              const Divider(height: 1),
-              if (loading)
-                const Padding(padding: EdgeInsets.all(16), child: LoadingView())
-              else if (snapshot.hasError)
-                ErrorView(
-                  message: snapshot.error is DashboardException
-                      ? (snapshot.error! as DashboardException).message
-                      : 'Could not load this section. Please try again.',
-                  onRetry: onRetry,
-                )
-              else if (bookings.isEmpty)
-                EmptyView(
-                  icon: Icons.event_available_outlined,
-                  message: section.emptyMessage,
-                )
-              else
-                ..._rows(context, bookings),
+              for (final item in bookings.take(maxRows)) _row(context, item),
+              if (bookings.length > maxRows)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: onOpenList,
+                    child: Text('View all ${bookings.length}'),
+                  ),
+                ),
             ],
           );
         },
@@ -91,71 +110,68 @@ class DashboardSectionCard extends StatelessWidget {
     );
   }
 
-  /// Big count + title. Tapping opens the filtered bookings list.
-  /// [bookings] is null while loading or after an error.
-  Widget _header(BuildContext context, List<DashboardBooking>? bookings) {
-    final theme = Theme.of(context);
-    final count = bookings?.length;
-    final highlight = section.isAlert && (count ?? 0) > 0;
-    final color = highlight ? AppColors.deepRed : theme.colorScheme.primary;
-    final countText = count == null
-        ? '–'
-        : count >= ShopDashboardService.sectionLimit
-        ? '$count+'
-        : '$count';
+  /// A short empty line (a full EmptyView would be too tall in a list of
+  /// five sections).
+  Widget _empty(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 8, bottom: 4),
+    child: Row(
+      children: [
+        Icon(
+          Icons.event_available_outlined,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(section.emptyMessage)),
+      ],
+    ),
+  );
 
-    return Semantics(
-      button: true,
-      label: '${section.title}: ${count ?? 'loading'}. Open bookings list.',
-      excludeSemantics: true,
+  /// One booking as a small card, like My Bookings.
+  Widget _row(BuildContext context, DashboardBooking item) {
+    final theme = Theme.of(context);
+    final b = item.booking;
+    return Card(
+      margin: const EdgeInsets.only(right: 8, bottom: 8),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
       child: InkWell(
-        onTap: onOpenList,
+        onTap: () => onOpenBooking(b.id),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(section.icon, color: color, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(section.title, style: theme.textTheme.titleMedium),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Ref ${b.referenceNo}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  StatusChip.booking(b.status),
+                ],
               ),
+              const SizedBox(height: 6),
+              Text(item.customerName, style: theme.textTheme.titleSmall),
+              const SizedBox(height: 2),
               Text(
-                countText,
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                ),
+                DashboardDates.detailFor(section, b, now),
+                style: section == DashboardSection.overdueReturns
+                    ? const TextStyle(
+                        color: AppColors.deepRed,
+                        fontWeight: FontWeight.w600,
+                      )
+                    : theme.textTheme.bodySmall,
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right),
             ],
           ),
         ),
       ),
     );
-  }
-
-  /// Up to [maxRows] bookings, then a "View all" link.
-  List<Widget> _rows(BuildContext context, List<DashboardBooking> bookings) {
-    final shown = bookings.take(maxRows);
-    return [
-      for (final item in shown)
-        ListTile(
-          onTap: () => onOpenBooking(item.booking.id),
-          title: Text('${item.booking.referenceNo} · ${item.customerName}'),
-          subtitle: Text(
-            DashboardDates.detailFor(section, item.booking, now),
-            style: section == DashboardSection.overdueReturns
-                ? const TextStyle(color: AppColors.deepRed)
-                : null,
-          ),
-          trailing: StatusChip.booking(item.booking.status),
-        ),
-      if (bookings.length > maxRows)
-        TextButton(
-          onPressed: onOpenList,
-          child: Text('View all ${bookings.length}'),
-        ),
-    ];
   }
 }

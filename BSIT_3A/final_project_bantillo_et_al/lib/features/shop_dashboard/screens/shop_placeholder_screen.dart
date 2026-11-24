@@ -30,6 +30,8 @@ class ShopPlaceholderScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Shop-side redesign: the same grey page as the other staff screens.
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(title: title),
       body: EmptyView(icon: icon, message: message),
