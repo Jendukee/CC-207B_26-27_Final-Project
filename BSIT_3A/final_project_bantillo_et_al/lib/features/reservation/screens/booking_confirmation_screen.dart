@@ -15,6 +15,7 @@ import 'package:orange150_rental/core/config/shop_contact.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
@@ -49,8 +50,9 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.colorScheme.surfaceContainerLow,
-      appBar: AppBar(
-        title: const Text('Request submitted'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: 'Request submitted',
         automaticallyImplyLeading: false, // nothing to go back to
       ),
       body: FutureBuilder<Booking>(

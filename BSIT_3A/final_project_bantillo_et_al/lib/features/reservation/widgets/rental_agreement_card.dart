@@ -5,23 +5,22 @@
 //     terms are READ-ONLY (shared AgreementDocument)
 //   * editable: Facebook account, Shoes size / Long sleeves size (only when
 //     those come with the item) and Note
-//   * signature replacement: "Type your full name to sign" (must match the
-//     full name in Card 1, ignoring case and extra spaces) and the
-//     "I have read and agree..." checkbox, then the date and time of
-//     signing
+//   * the signature (typed name, checkbox, signing time) is NOT here any
+//     more: customer redesign 2 moved it to the last checkout card, "Sign
+//     and submit" (sign_and_submit_fields.dart), so the customer reads
+//     everything first (H6, H5)
 //
-// Display only: the checkout owns the controllers and the agreed flag.
+// Display only: the checkout owns the controllers.
 //
 // OWNER: Member 2.
 
 import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/config/rental_terms.dart';
-import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/agreement_document.dart';
 import 'package:orange150_rental/features/reservation/models/agreement_form.dart';
 
-/// The e-contract with its signature fields.
+/// The e-contract (read-only form, terms and the optional fields).
 class RentalAgreementCard extends StatelessWidget {
   /// Creates the card.
   const RentalAgreementCard({
@@ -31,11 +30,7 @@ class RentalAgreementCard extends StatelessWidget {
     required this.note,
     required this.shoeSize,
     required this.longSleevesSize,
-    required this.signature,
-    required this.agreed,
-    required this.onAgreedChanged,
     required this.onChanged,
-    this.signedAt,
     this.enabled = true,
   });
 
@@ -48,18 +43,8 @@ class RentalAgreementCard extends StatelessWidget {
   final TextEditingController shoeSize;
   final TextEditingController longSleevesSize;
 
-  /// "Type your full name to sign".
-  final TextEditingController signature;
-
-  /// The agreement checkbox.
-  final bool agreed;
-  final ValueChanged<bool> onAgreedChanged;
-
   /// Called whenever an editable field changes (to refresh the summary).
   final VoidCallback onChanged;
-
-  /// When both signature parts became valid; null while not signed.
-  final DateTime? signedAt;
 
   /// False while submitting.
   final bool enabled;
@@ -74,7 +59,6 @@ class RentalAgreementCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final inclusions = form.item.inclusions;
     return AgreementDocument(
       rows: [
@@ -101,41 +85,6 @@ class RentalAgreementCard extends StatelessWidget {
             maxLength: 20,
           ),
         _field(note, 'Note (optional)', maxLength: 500, maxLines: 2),
-        const Divider(height: 24),
-
-        // Signature replacement.
-        Text('Signature', style: theme.textTheme.titleSmall),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: signature,
-          enabled: enabled,
-          textCapitalization: TextCapitalization.words,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          onChanged: (_) => onChanged(),
-          decoration: const InputDecoration(
-            labelText: 'Type your full name to sign *',
-            helperText: 'Same as the full name in Contact details',
-          ),
-          validator: (value) =>
-              AgreementRules.validateSignature(value, form.fullName),
-        ),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: agreed,
-          onChanged: enabled ? (v) => onAgreedChanged(v ?? false) : null,
-          title: const Text(
-            'I have read and agree to the rental terms of Orange 150. *',
-          ),
-        ),
-        Text(
-          signedAt == null
-              ? 'Not signed yet.'
-              : 'Signed on ${Formatters.dateTime(signedAt!)}',
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
         const SizedBox(height: 12),
       ],
     );
