@@ -13,11 +13,15 @@
 //   Card 5 Payment option   50% reservation fee or full payment (radio
 //                           cards with amounts) and Cash / GCash / Bank
 //   Card 6 Rental agreement the e-contract from the shop's paper form
-//                           (Phase 2, RentalAgreementCard) with the typed
-//                           signature and the agreement checkbox
+//                           (Phase 2, RentalAgreementCard): read-only form,
+//                           accessories, terms and the optional fields
+//   Card 7 Sign and submit  LAST card (customer redesign 2): the typed
+//                           signature, the agreement checkbox and the
+//                           signing time, right above the sticky bar, so
+//                           everything is read before signing (H6, H5)
 //   Sticky bar              "Total ₱X · Pay now ₱Y" + "Submit request",
 //                           disabled with a reason until the agreement is
-//                           signed
+//                           signed; tapping the reason scrolls to Card 7
 //
 // Submitting calls create_reservation (0011), which stores the address,
 // Facebook account, fitting date, note, payment method, typed signature
@@ -35,6 +39,7 @@ import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/phone_form_field.dart';
@@ -43,6 +48,7 @@ import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/reservation/models/agreement_form.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/features/reservation/widgets/rental_agreement_card.dart';
+import 'package:orange150_rental/features/reservation/widgets/sign_and_submit_fields.dart';
 import 'package:orange150_rental/features/reservation/widgets/reservation_step_indicator.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/item.dart';
@@ -100,6 +106,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final ReservationService _service = ReservationService();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late Future<_CheckoutData> _future;
+
+  /// The "Sign and submit" card, scrolled to from the sticky bar.
+  final GlobalKey _signCardKey = GlobalKey(debugLabel: 'signAndSubmit');
 
   // Card 1.
   final TextEditingController _name = TextEditingController();
@@ -373,7 +382,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
         return Scaffold(
           backgroundColor: theme.colorScheme.surfaceContainerLow,
-          appBar: AppBar(title: const Text('Checkout')),
+          // Customer redesign 2: shared header with the Orange 150 mark (H4).
+          appBar: const BrandAppBar(title: 'Checkout'),
           body: switch (snapshot.connectionState) {
             ConnectionState.done when snapshot.hasError => ErrorView(
               message: widget.eventDate == null
@@ -405,6 +415,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ? null
           : 'Sign the rental agreement (last card): type your full name '
                 'and tick the box.',
+      // Customer redesign 2: tapping the reason scrolls to "Sign and
+      // submit" (H5, H7).
+      onMessageTap: _signed ? null : _scrollToSignCard,
       leading: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,322 +455,357 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     return Form(
       key: _formKey,
-      child: ListView(
+      // Customer redesign 2: a Column in a scroll view (not a lazy
+      // ListView), so the last card always exists and the sticky bar can
+      // scroll to it. The page has only seven cards.
+      child: SingleChildScrollView(
         padding: const EdgeInsets.only(bottom: 16),
-        children: [
-          const ReservationStepIndicator(
-            step: 2,
-            labels: ['Date', 'Checkout', 'Submitted'],
-          ),
-          const SizedBox(height: 8),
-          if (!data.available)
-            SectionCard(
-              margin: gap,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'These dates were just booked by someone else. '
-                    'Please choose another date.',
-                    style: TextStyle(color: AppColors.deepRed),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton(
-                    onPressed: () => context.pop(),
-                    child: const Text('Choose another date'),
-                  ),
-                ],
-              ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ReservationStepIndicator(
+              step: 2,
+              labels: ['Date', 'Checkout', 'Submitted'],
             ),
-
-          // Card 1: contact details.
-          SectionCard(
-            title: 'Contact details',
-            icon: Icons.person_outline,
-            margin: gap,
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _name,
-                  enabled: !_submitting,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.name],
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  // The signature must match this name, so re-check it.
-                  onChanged: (_) => _onSignatureChanged(),
-                  decoration: const InputDecoration(labelText: 'Full name *'),
-                  validator: (v) =>
-                      Validators.required(v, fieldName: 'Full name'),
-                ),
-                const SizedBox(height: 12),
-                PhoneFormField(
-                  controller: _phone,
-                  isRequired: true,
-                  enabled: !_submitting,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _address,
-                  enabled: !_submitting,
-                  textCapitalization: TextCapitalization.words,
-                  autofillHints: const [AutofillHints.fullStreetAddress],
-                  maxLength: 200,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'Address (optional)',
-                    helperText: 'Barangay and city, e.g. Jaro, Iloilo City',
-                  ),
-                ),
-                // Only offered when the address differs from the profile;
-                // the profile changes only if the customer ticks it.
-                if (_address.text.trim() != _profileAddress)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    value: _saveAddress,
-                    onChanged: _submitting
-                        ? null
-                        : (v) => setState(() => _saveAddress = v ?? false),
-                    title: const Text('Save this address to my profile'),
-                  ),
-              ],
-            ),
-          ),
-
-          // Card 2: item.
-          SectionCard(
-            title: 'Item',
-            icon: Icons.checkroom_outlined,
-            margin: gap,
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox.square(
-                    dimension: 72,
-                    child: data.item.photoUrls.isEmpty
-                        ? ColoredBox(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.checkroom),
-                          )
-                        : Image.network(
-                            data.item.photoUrls.first,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) =>
-                                const Icon(Icons.checkroom),
-                          ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        data.item.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall,
-                      ),
-                      Text(
-                        '${data.item.type.label} · Size ${data.item.size}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      Text(
-                        Formatters.peso(data.item.price),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: AppColors.maroon,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Card 3: rental schedule.
-          SectionCard(
-            title: 'Rental schedule',
-            icon: Icons.event_outlined,
-            margin: gap,
-            trailing: TextButton(
-              onPressed: _submitting ? null : () => context.pop(),
-              child: const Text('Change'),
-            ),
-            child: Column(
-              children: [
-                _row('Pick-up', Formatters.date(pickup)),
-                _row('Event', Formatters.date(event)),
-                _row('Return', Formatters.date(returnDay)),
-                const Divider(),
-                Row(
+            const SizedBox(height: 8),
+            if (!data.available)
+              SectionCard(
+                margin: gap,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Text(
-                        _fittingDate == null
-                            ? 'Preferred fitting date (optional)\n'
-                                  'To be arranged with the shop'
-                            : 'Preferred fitting date\n'
-                                  '${Formatters.date(_fittingDate!)}',
-                      ),
+                    const Text(
+                      'These dates were just booked by someone else. '
+                      'Please choose another date.',
+                      style: TextStyle(color: AppColors.deepRed),
                     ),
-                    if (_fittingDate != null)
-                      IconButton(
-                        tooltip: 'Remove fitting date',
-                        onPressed: () => setState(() => _fittingDate = null),
-                        icon: const Icon(Icons.close),
-                      ),
-                    OutlinedButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => _pickFittingDate(pickup),
-                      child: Text(_fittingDate == null ? 'Choose' : 'Change'),
+                    const SizedBox(height: 8),
+                    FilledButton(
+                      onPressed: () => context.pop(),
+                      child: const Text('Choose another date'),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-
-          // Card 4: measurements (collapsible).
-          SectionCard(
-            margin: gap,
-            padding: EdgeInsets.zero,
-            child: ExpansionTile(
-              leading: const Icon(Icons.straighten, color: AppColors.maroon),
-              title: const Text('Measurements (optional)'),
-              subtitle: Text(
-                _hasMeasurements
-                    ? 'Saved measurements will be shared with the shop'
-                    : 'Helps the shop prepare your fit',
               ),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [
-                for (final entry in _measurementFields.entries) ...[
-                  TextFormField(
-                    controller: _measure[entry.key],
-                    enabled: !_submitting,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: Validators.measurementFormatters,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      labelText: entry.value.$1,
-                      suffixText: 'in',
-                    ),
-                    validator: (v) => Validators.numberRange(
-                      v,
-                      min: entry.value.$2,
-                      max: entry.value.$3,
-                      fieldName: entry.value.$1,
-                      isRequired: false,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                TextFormField(
-                  controller: _measureNotes,
-                  enabled: !_submitting,
-                  maxLength: 500,
-                  maxLines: 2,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'Fitting notes (optional)',
-                  ),
-                ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: _measureConsent,
-                  onChanged: _submitting
-                      ? null
-                      : (v) => setState(() => _measureConsent = v ?? false),
-                  title: const Text(
-                    'I consent to sharing these measurements with the shop.',
-                  ),
-                  subtitle: const Text('Only needed if you entered any.'),
-                ),
-              ],
-            ),
-          ),
 
-          // Card 5: payment option and method.
-          SectionCard(
-            title: 'Payment option',
-            icon: Icons.payments_outlined,
-            margin: gap,
-            child: RadioGroup<PaymentOption>(
-              groupValue: _option,
-              onChanged: (value) {
-                if (!_submitting && value != null) {
-                  setState(() => _option = value);
-                }
-              },
+            // Card 1: contact details.
+            SectionCard(
+              title: 'Contact details',
+              icon: Icons.person_outline,
+              margin: gap,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _optionCard(
-                    PaymentOption.half,
-                    '50% reservation fee',
-                    'Pay ${Formatters.peso(PaymentPlan.dueNow(data.item.price, PaymentOption.half))} now, '
-                        '${Formatters.peso(PaymentPlan.balanceAfter(data.item.price, PaymentOption.half))} at pick-up. '
-                        'Non-refundable.',
+                  TextFormField(
+                    controller: _name,
+                    enabled: !_submitting,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.name],
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    // The signature must match this name, so re-check it.
+                    onChanged: (_) => _onSignatureChanged(),
+                    decoration: const InputDecoration(labelText: 'Full name *'),
+                    validator: (v) =>
+                        Validators.required(v, fieldName: 'Full name'),
                   ),
-                  const SizedBox(height: 8),
-                  _optionCard(
-                    PaymentOption.full,
-                    'Full payment',
-                    'Pay ${Formatters.peso(data.item.price)} now, nothing at pick-up.',
+                  const SizedBox(height: 12),
+                  PhoneFormField(
+                    controller: _phone,
+                    isRequired: true,
+                    enabled: !_submitting,
                   ),
-                  const SizedBox(height: 16),
-                  Text('Payment method', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  SegmentedButton<PlannedPaymentMethod>(
-                    showSelectedIcon: false,
-                    segments: [
-                      for (final method in PlannedPaymentMethod.values)
-                        ButtonSegment(value: method, label: Text(method.label)),
-                    ],
-                    selected: {_method},
-                    onSelectionChanged: _submitting
-                        ? null
-                        : (s) => setState(() => _method = s.first),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _address,
+                    enabled: !_submitting,
+                    textCapitalization: TextCapitalization.words,
+                    autofillHints: const [AutofillHints.fullStreetAddress],
+                    maxLength: 200,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Address (optional)',
+                      helperText: 'Barangay and city, e.g. Jaro, Iloilo City',
+                    ),
+                  ),
+                  // Only offered when the address differs from the profile;
+                  // the profile changes only if the customer ticks it.
+                  if (_address.text.trim() != _profileAddress)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _saveAddress,
+                      onChanged: _submitting
+                          ? null
+                          : (v) => setState(() => _saveAddress = v ?? false),
+                      title: const Text('Save this address to my profile'),
+                    ),
+                ],
+              ),
+            ),
+
+            // Card 2: item.
+            SectionCard(
+              title: 'Item',
+              icon: Icons.checkroom_outlined,
+              margin: gap,
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox.square(
+                      dimension: 72,
+                      child: data.item.photoUrls.isEmpty
+                          ? ColoredBox(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              child: const Icon(Icons.checkroom),
+                            )
+                          : Image.network(
+                              data.item.photoUrls.first,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const Icon(Icons.checkroom),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data.item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        Text(
+                          '${data.item.type.label} · Size ${data.item.size}',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        Text(
+                          Formatters.peso(data.item.price),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: AppColors.maroon,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
 
-          // Card 6: the e-contract (shop's paper reservation form).
-          SectionCard(
-            title: 'Rental agreement',
-            icon: Icons.assignment_outlined,
-            margin: gap,
-            child: RentalAgreementCard(
-              form: _agreementForm(data),
-              facebook: _facebook,
-              note: _note,
-              shoeSize: _shoeSize,
-              longSleevesSize: _sleevesSize,
-              signature: _signature,
-              agreed: _agreed,
-              signedAt: _signedAt,
-              enabled: !_submitting,
-              onAgreedChanged: (value) {
-                _agreed = value;
-                _onSignatureChanged();
-              },
-              // Rebuild so the read-only rows follow the editable fields.
-              onChanged: _onSignatureChanged,
+            // Card 3: rental schedule.
+            SectionCard(
+              title: 'Rental schedule',
+              icon: Icons.event_outlined,
+              margin: gap,
+              trailing: TextButton(
+                onPressed: _submitting ? null : () => context.pop(),
+                child: const Text('Change'),
+              ),
+              child: Column(
+                children: [
+                  _row('Pick-up', Formatters.date(pickup)),
+                  _row('Event', Formatters.date(event)),
+                  _row('Return', Formatters.date(returnDay)),
+                  const Divider(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _fittingDate == null
+                              ? 'Preferred fitting date (optional)\n'
+                                    'To be arranged with the shop'
+                              : 'Preferred fitting date\n'
+                                    '${Formatters.date(_fittingDate!)}',
+                        ),
+                      ),
+                      if (_fittingDate != null)
+                        IconButton(
+                          tooltip: 'Remove fitting date',
+                          onPressed: () => setState(() => _fittingDate = null),
+                          icon: const Icon(Icons.close),
+                        ),
+                      OutlinedButton(
+                        onPressed: _submitting
+                            ? null
+                            : () => _pickFittingDate(pickup),
+                        child: Text(_fittingDate == null ? 'Choose' : 'Change'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+
+            // Card 4: measurements (collapsible).
+            SectionCard(
+              margin: gap,
+              padding: EdgeInsets.zero,
+              child: ExpansionTile(
+                leading: const Icon(Icons.straighten, color: AppColors.maroon),
+                title: const Text('Measurements (optional)'),
+                subtitle: Text(
+                  _hasMeasurements
+                      ? 'Saved measurements will be shared with the shop'
+                      : 'Helps the shop prepare your fit',
+                ),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  for (final entry in _measurementFields.entries) ...[
+                    TextFormField(
+                      controller: _measure[entry.key],
+                      enabled: !_submitting,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: Validators.measurementFormatters,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: entry.value.$1,
+                        suffixText: 'in',
+                      ),
+                      validator: (v) => Validators.numberRange(
+                        v,
+                        min: entry.value.$2,
+                        max: entry.value.$3,
+                        fieldName: entry.value.$1,
+                        isRequired: false,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  TextFormField(
+                    controller: _measureNotes,
+                    enabled: !_submitting,
+                    maxLength: 500,
+                    maxLines: 2,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Fitting notes (optional)',
+                    ),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: _measureConsent,
+                    onChanged: _submitting
+                        ? null
+                        : (v) => setState(() => _measureConsent = v ?? false),
+                    title: const Text(
+                      'I consent to sharing these measurements with the shop.',
+                    ),
+                    subtitle: const Text('Only needed if you entered any.'),
+                  ),
+                ],
+              ),
+            ),
+
+            // Card 5: payment option and method.
+            SectionCard(
+              title: 'Payment option',
+              icon: Icons.payments_outlined,
+              margin: gap,
+              child: RadioGroup<PaymentOption>(
+                groupValue: _option,
+                onChanged: (value) {
+                  if (!_submitting && value != null) {
+                    setState(() => _option = value);
+                  }
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _optionCard(
+                      PaymentOption.half,
+                      '50% reservation fee',
+                      'Pay ${Formatters.peso(PaymentPlan.dueNow(data.item.price, PaymentOption.half))} now, '
+                          '${Formatters.peso(PaymentPlan.balanceAfter(data.item.price, PaymentOption.half))} at pick-up. '
+                          'Non-refundable.',
+                    ),
+                    const SizedBox(height: 8),
+                    _optionCard(
+                      PaymentOption.full,
+                      'Full payment',
+                      'Pay ${Formatters.peso(data.item.price)} now, nothing at pick-up.',
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Payment method', style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    SegmentedButton<PlannedPaymentMethod>(
+                      showSelectedIcon: false,
+                      segments: [
+                        for (final method in PlannedPaymentMethod.values)
+                          ButtonSegment(
+                            value: method,
+                            label: Text(method.label),
+                          ),
+                      ],
+                      selected: {_method},
+                      onSelectionChanged: _submitting
+                          ? null
+                          : (s) => setState(() => _method = s.first),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Card 6: the e-contract (shop's paper reservation form).
+            SectionCard(
+              title: 'Rental agreement',
+              icon: Icons.assignment_outlined,
+              margin: gap,
+              child: RentalAgreementCard(
+                form: _agreementForm(data),
+                facebook: _facebook,
+                note: _note,
+                shoeSize: _shoeSize,
+                longSleevesSize: _sleevesSize,
+                enabled: !_submitting,
+                // Rebuild so the read-only rows follow the editable fields.
+                onChanged: _onSignatureChanged,
+              ),
+            ),
+
+            // Card 7 (customer redesign 2): the signature comes LAST, after
+            // every other card and right above the Submit bar (H6, H5).
+            SectionCard(
+              key: _signCardKey,
+              title: 'Sign and submit',
+              icon: Icons.draw_outlined,
+              margin: gap,
+              child: SignAndSubmitFields(
+                fullName: _name.text.trim(),
+                signature: _signature,
+                agreed: _agreed,
+                signedAt: _signedAt,
+                enabled: !_submitting,
+                onAgreedChanged: (value) {
+                  _agreed = value;
+                  _onSignatureChanged();
+                },
+                onChanged: _onSignatureChanged,
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  /// Scrolls the "Sign and submit" card into view.
+  void _scrollToSignCard() {
+    final target = _signCardKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
     );
   }
 
