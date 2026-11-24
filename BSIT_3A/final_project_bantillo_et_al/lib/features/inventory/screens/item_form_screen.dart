@@ -1,13 +1,21 @@
 // Staff form to add or edit a rentable item (name, type, age group, size,
 // price, condition, description, inclusions, photos).
 //
+// UI audit changes: a failed save keeps the form (#11); after the first
+// successful insert the form switches to edit mode, so pressing Save again
+// after an error updates the item instead of creating a duplicate; type and
+// age group use SegmentedButtons (#21); the price accepts numbers only
+// (#16); retiring an item asks for confirmation (#18).
+//
 // OWNER: Member 1.
 
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
 
@@ -43,6 +51,16 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
   bool _isLoading = false;
   bool _isSaving = false;
+
+  /// Id of the item being edited. Starts as widget.itemId (null for a new
+  /// item) and is set after the first successful insert (duplicate fix).
+  late String? _itemId = widget.itemId;
+
+  /// True once the item exists in the database: Save then updates it.
+  bool get _isEditing => _itemId != null;
+
+  /// Condition when the form opened, to know if staff are retiring it.
+  ItemCondition _originalCondition = ItemCondition.available;
 
   /// UI audit #11: two separate errors.
   /// [_loadError]: the item could not be loaded (full-screen error + Retry).
@@ -92,6 +110,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         _type = item.type;
         _ageGroup = item.ageGroup;
         _condition = item.condition;
+        _originalCondition = item.condition;
         _existingPhotoUrls = List<String>.from(item.photoUrls);
 
         _isLoading = false;
@@ -121,8 +140,17 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Unable to select photos: $e')));
+      // UI audit #12: no raw exception text.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyErrorMessage(
+              e,
+              fallback: 'Could not open your photos. Please try again.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -146,17 +174,52 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         .toList();
   }
 
+  /// UI audit #18: asks before retiring, because a retired item leaves the
+  /// catalog. Returns true when it is OK to save.
+  Future<bool> _confirmRetireIfNeeded() async {
+    final retiring =
+        _condition == ItemCondition.retired &&
+        _originalCondition != ItemCondition.retired;
+    if (!retiring) return true;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Retire this item?'),
+        content: const Text(
+          'Retired items are hidden from the catalog and cannot be '
+          'reserved. You can bring it back later by changing its condition.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.deepRed),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Retire item'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
   Future<void> _saveItem() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!await _confirmRetireIfNeeded() || !mounted) return;
 
     setState(() {
       _isSaving = true;
       _errorMessage = null;
     });
 
+    // Was this a brand-new item when Save was pressed? (for the message)
+    final wasNew = !_isEditing;
+
     try {
       final item = Item(
-        id: widget.itemId ?? '',
+        id: _itemId ?? '',
         name: _nameController.text.trim(),
         type: _type,
         ageGroup: _ageGroup,
@@ -170,15 +233,19 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
       Item savedItem;
 
-      if (widget.isEditing) {
+      if (_isEditing) {
         savedItem = await _service.updateItem(item);
       } else {
         savedItem = await _service.createItem(item);
+        // Duplicate fix: remember the new id right away. If a later step
+        // (photo upload) fails and staff press Save again, the form is now
+        // in edit mode and UPDATES this item instead of inserting a copy.
+        _itemId = savedItem.id;
       }
 
-      final uploadedUrls = <String>[];
-
-      for (final photo in _newPhotos) {
+      // Upload new photos one by one. Each uploaded photo moves to
+      // _existingPhotoUrls at once, so a retry never uploads it twice.
+      for (final photo in List<XFile>.of(_newPhotos)) {
         final Uint8List bytes = await photo.readAsBytes();
 
         final url = await _service.uploadPhoto(
@@ -187,35 +254,33 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
           fileName: photo.name,
         );
 
-        uploadedUrls.add(url);
+        _existingPhotoUrls.add(url);
+        _newPhotos.remove(photo);
       }
 
-      if (_newPhotos.isNotEmpty || widget.isEditing) {
-        final updatedItem = Item(
-          id: savedItem.id,
-          name: item.name,
-          type: item.type,
-          ageGroup: item.ageGroup,
-          size: item.size,
-          price: item.price,
-          description: item.description,
-          inclusions: item.inclusions,
-          photoUrls: [..._existingPhotoUrls, ...uploadedUrls],
-          condition: item.condition,
-          createdAt: savedItem.createdAt,
-        );
-
-        savedItem = await _service.updateItem(updatedItem);
-      }
+      // Save the final photo list.
+      final updatedItem = Item(
+        id: savedItem.id,
+        name: item.name,
+        type: item.type,
+        ageGroup: item.ageGroup,
+        size: item.size,
+        price: item.price,
+        description: item.description,
+        inclusions: item.inclusions,
+        photoUrls: List<String>.of(_existingPhotoUrls),
+        condition: item.condition,
+        createdAt: savedItem.createdAt,
+      );
+      savedItem = await _service.updateItem(updatedItem);
+      _originalCondition = savedItem.condition;
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            widget.isEditing
-                ? 'Item updated successfully!'
-                : 'Item added successfully!',
+            wasNew ? 'Item added successfully!' : 'Item updated successfully!',
           ),
         ),
       );
@@ -225,6 +290,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       if (!mounted) return;
 
       // Shown above the Save button; the form keeps the user's edits.
+      // setState also refreshes the photo list and the title ("Edit
+      // Item" once a new item was saved).
       setState(() {
         _errorMessage = friendlyErrorMessage(
           e,
@@ -334,6 +401,34 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     );
   }
 
+  /// A label above a SegmentedButton with one segment per value.
+  Widget _segmentedField<T>({
+    required String label,
+    required List<T> values,
+    required String Function(T value) labelOf,
+    required T selected,
+    required ValueChanged<T> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        SegmentedButton<T>(
+          showSelectedIcon: false,
+          segments: [
+            for (final value in values)
+              ButtonSegment<T>(value: value, label: Text(labelOf(value))),
+          ],
+          selected: {selected},
+          onSelectionChanged: _isSaving
+              ? null
+              : (selection) => onChanged(selection.first),
+        ),
+      ],
+    );
+  }
+
   Widget _buildForm() {
     return Form(
       key: _formKey,
@@ -355,40 +450,22 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
             },
           ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<ItemType>(
-            initialValue: _type,
-            decoration: const InputDecoration(
-              labelText: 'Item Type',
-              border: OutlineInputBorder(),
-            ),
-            items: ItemType.values.map((type) {
-              return DropdownMenuItem(value: type, child: Text(type.label));
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _type = value;
-                });
-              }
-            },
+          // UI audit #21: exactly one of two options -> SegmentedButton,
+          // so both choices are always visible (was a dropdown).
+          _segmentedField<ItemType>(
+            label: 'Item Type *',
+            values: ItemType.values,
+            labelOf: (type) => type.label,
+            selected: _type,
+            onChanged: (type) => setState(() => _type = type),
           ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<AgeGroup>(
-            initialValue: _ageGroup,
-            decoration: const InputDecoration(
-              labelText: 'Age Group',
-              border: OutlineInputBorder(),
-            ),
-            items: AgeGroup.values.map((group) {
-              return DropdownMenuItem(value: group, child: Text(group.label));
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _ageGroup = value;
-                });
-              }
-            },
+          _segmentedField<AgeGroup>(
+            label: 'Age Group *',
+            values: AgeGroup.values,
+            labelOf: (group) => group.label,
+            selected: _ageGroup,
+            onChanged: (group) => setState(() => _ageGroup = group),
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -408,6 +485,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _priceController,
+            // UI audit #16: digits and one decimal point (max 2 decimals).
+            inputFormatters: Validators.moneyFormatters,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
               labelText: 'Rental Price (PHP) *',
@@ -482,7 +561,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
               onPressed: _isSaving ? null : _saveItem,
               child: _isSaving
                   ? const CircularProgressIndicator()
-                  : Text(widget.isEditing ? 'Save Changes' : 'Add Item'),
+                  : Text(_isEditing ? 'Save Changes' : 'Add Item'),
             ),
           ),
           const SizedBox(height: 12),
@@ -499,7 +578,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.isEditing ? 'Edit Item' : 'Add Item')),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit Item' : 'Add Item')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           // Only a failed LOAD replaces the form; a failed save does not.
