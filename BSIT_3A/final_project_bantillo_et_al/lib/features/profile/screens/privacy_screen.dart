@@ -12,6 +12,7 @@ import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
@@ -161,7 +162,8 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     const gap = EdgeInsets.fromLTRB(8, 8, 8, 0);
     return Scaffold(
       backgroundColor: theme.colorScheme.surfaceContainerLow,
-      appBar: AppBar(title: const Text('Privacy and data')),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: const BrandAppBar(title: 'Privacy and data'),
       body: FutureBuilder<ProfileData>(
         future: _profile,
         builder: (context, snapshot) {
