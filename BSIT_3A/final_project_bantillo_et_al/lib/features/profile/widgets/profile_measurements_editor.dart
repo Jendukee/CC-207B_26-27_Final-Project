@@ -1,3 +1,8 @@
+// Dialog to edit the customer's saved body measurements (inches) with
+// measurement consent. Inputs accept numbers only (UI audit #24).
+//
+// OWNER: Member 2.
+
 import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/utils/validators.dart';
@@ -111,6 +116,10 @@ class _ProfileMeasurementsEditorState
               for (final entry in _fields.entries) ...[
                 TextFormField(
                   controller: _controllers[entry.key],
+                  // UI audit #24: numbers only (max 3 digits and 2
+                  // decimals), errors shown as the user types.
+                  inputFormatters: Validators.measurementFormatters,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
