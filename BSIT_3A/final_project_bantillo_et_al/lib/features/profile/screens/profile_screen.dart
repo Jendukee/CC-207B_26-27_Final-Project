@@ -2,8 +2,9 @@
 //   * a maroon header with the customer's name and mobile
 //   * "My bookings" shortcut icons for the 5 order tabs, with counts;
 //     each opens /my-bookings?tab=...
-//   * list tiles: Measurements, Contact details, Rental terms, Privacy and
-//     data (its own page), and Sign out (asks first, shown in red)
+//   * list tiles: Favorites (customer redesign 2), Measurements, Contact
+//     details, Rental terms, Privacy and data (its own page), and Sign out
+//     (asks first, shown in red)
 // Guests see the sign-in prompt with the "Staff sign in" link.
 //
 // UI audit changes kept: friendly errors (#12), sign-out confirmation
@@ -19,6 +20,7 @@ import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
@@ -193,8 +195,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.colorScheme.surfaceContainerLow,
-      appBar: AppBar(
-        title: const Text('Profile'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: 'Profile',
         actions: [
           if (session.isSignedIn)
             IconButton(
@@ -316,6 +319,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: EdgeInsets.zero,
             child: Column(
               children: [
+                // Customer redesign 2: saved items, one tap away (H6, H7).
+                // By path only (catalog feature); it opens in the Browse tab.
+                _tile(
+                  Icons.favorite_border,
+                  'Favorites',
+                  'Gowns and suits you saved',
+                  () => context.go(RoutePaths.favoritesFull),
+                ),
+                const Divider(height: 1),
                 _tile(
                   Icons.straighten,
                   'Measurements',
