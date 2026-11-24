@@ -19,6 +19,7 @@ import 'package:go_router/go_router.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/agreement_document.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
@@ -276,6 +277,7 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
   /// Customer name and mobile number.
   Widget _customerSection(ShopBooking booking) {
     final phone = booking.customerPhone ?? '';
+    final row = booking.booking;
     return DetailSection(
       title: 'Customer',
       icon: Icons.person_outline,
@@ -285,6 +287,23 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
           label: 'Mobile',
           value: phone.isEmpty ? 'Not provided' : phone,
         ),
+        // E-contract details given at checkout (Phase 2), when present.
+        if ((row.facebookAccount ?? '').isNotEmpty)
+          DetailRow(label: 'Facebook', value: row.facebookAccount!),
+        if ((row.customerAddress ?? '').isNotEmpty)
+          DetailRow(label: 'Address', value: row.customerAddress!),
+        if (row.preferredPaymentMethod != null)
+          DetailRow(
+            label: 'Will pay by',
+            value: PaymentMethod.labelFor(row.preferredPaymentMethod!),
+          ),
+        if (row.preferredFittingDate != null)
+          DetailRow(
+            label: 'Fitting date',
+            value: Formatters.date(row.preferredFittingDate!),
+          ),
+        if ((row.notes ?? '').isNotEmpty)
+          DetailRow(label: 'Note', value: row.notes!),
       ],
     );
   }
@@ -348,7 +367,17 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
       title: 'E-contract',
       icon: Icons.assignment_turned_in_outlined,
       children: [
-        if (acknowledgedAt != null)
+        // Phase 2: bookings signed with a typed name.
+        if (booking.isSigned)
+          NoticeBox(
+            icon: Icons.verified_outlined,
+            color: AppColors.success,
+            text:
+                'Customer signed as ${booking.signedName}'
+                '${acknowledgedAt == null ? '' : ' on ${Formatters.dateTime(acknowledgedAt)}'}'
+                '${version == null ? '' : ' (terms version $version)'}.',
+          )
+        else if (acknowledgedAt != null)
           NoticeBox(
             icon: Icons.verified_outlined,
             color: AppColors.success,
@@ -364,6 +393,21 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
             text:
                 'The customer has NOT acknowledged the rental terms. '
                 'Ask them to accept the terms before releasing the items.',
+          ),
+        if (booking.termsSnapshot != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => showSignedAgreement(
+                context,
+                snapshot: booking.termsSnapshot!,
+                signedName: booking.signedName ?? '',
+                signedAt: acknowledgedAt,
+                version: version,
+              ),
+              icon: const Icon(Icons.description_outlined),
+              label: const Text('View signed agreement'),
+            ),
           ),
       ],
     );
@@ -434,12 +478,20 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
                 : 'Record balance payment',
           ),
         ),
+      // UI audit #31: only ONE filled (primary) button. While a balance
+      // is owed, "Record balance payment" is primary and this is outlined.
       if (BookingRules.canMarkPickedUp(booking))
-        FilledButton.icon(
-          onPressed: _busy ? null : _markPickedUp,
-          icon: const Icon(Icons.outbox_outlined),
-          label: const Text('Mark picked up'),
-        ),
+        BookingRules.canRecordPayment(booking)
+            ? OutlinedButton.icon(
+                onPressed: _busy ? null : _markPickedUp,
+                icon: const Icon(Icons.outbox_outlined),
+                label: const Text('Mark picked up'),
+              )
+            : FilledButton.icon(
+                onPressed: _busy ? null : _markPickedUp,
+                icon: const Icon(Icons.outbox_outlined),
+                label: const Text('Mark picked up'),
+              ),
       if (BookingRules.canMarkReturned(booking))
         FilledButton.icon(
           onPressed: _busy ? null : _markReturned,
