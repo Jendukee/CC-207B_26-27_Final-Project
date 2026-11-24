@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/features/reports/models/report_data.dart';
 import 'package:orange150_rental/features/reports/services/reports_service.dart';
 import 'package:orange150_rental/features/reports/widgets/month_bar_chart.dart';
@@ -74,8 +75,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reports'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: 'Reports',
         actions: [
           IconButton(
             tooltip: 'Refresh',
