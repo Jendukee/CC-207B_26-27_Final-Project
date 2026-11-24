@@ -26,6 +26,32 @@ import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/theme/app_colors.dart';
 
+/// The mark on a small maroon rounded badge, exactly as on the Splash
+/// screen, for WHITE surfaces such as the staff NavigationRail (Phase 2):
+/// gold straight on white would be too faint (below 3:1), gold on maroon
+/// is about 5:1. Not a button.
+class BrandBadge extends StatelessWidget {
+  /// Creates the badge, [size] px square.
+  const BrandBadge({super.key, this.size = 44});
+
+  /// Width and height of the badge.
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppColors.maroon,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: BrandLogo(size: size * 0.64),
+    );
+  }
+}
+
 /// The Orange 150 mark (the Splash screen logo), about [size] px tall.
 class BrandLogo extends StatelessWidget {
   /// Creates the mark.

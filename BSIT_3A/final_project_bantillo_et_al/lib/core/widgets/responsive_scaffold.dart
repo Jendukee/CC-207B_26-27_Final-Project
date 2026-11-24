@@ -4,11 +4,15 @@
 //   work well on the shop's tablet and on a laptop browser.
 // - With alwaysBottomBar: true (customer shell) the bottom NavigationBar
 //   is used at every width.
+// - Shop-side redesign (Phase 2): the rail shows the Orange 150 mark at the
+//   top (BrandBadge, maroon badge so it is visible on the white rail) (H4).
 //
 // OWNER: team lead. Change only via a reviewed PR.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 
 /// One tab in the navigation bar / rail.
 class ResponsiveDestination {
@@ -73,6 +77,11 @@ class ResponsiveScaffold extends StatelessWidget {
                 selectedIndex: navigationShell.currentIndex,
                 onDestinationSelected: _onSelect,
                 labelType: NavigationRailLabelType.all,
+                // The logo at the top of the rail (not a button).
+                leading: const Padding(
+                  padding: EdgeInsets.only(top: 8, bottom: 16),
+                  child: BrandBadge(),
+                ),
                 destinations: [
                   for (final d in destinations)
                     NavigationRailDestination(
