@@ -1,9 +1,16 @@
-// Browse tab: search the catalog and filter by type, age group, size,
-// maximum price and event date.
+// Browse tab (the customer home), laid out like a shopping app (customer
+// redesign, Phase 1):
+//   * a search bar that stays at the top while scrolling, with a filter
+//     icon (badge = number of active filters)
+//   * a horizontal category row: Gowns, Long Gowns, Suits, Bearer, Kids,
+//     Adult
+//   * a 2-column product grid (more columns on tablets / web)
+//   * a filter bottom sheet (type, age group, size, price, event date)
+//   * skeleton cards while loading, EmptyView / ErrorView with actions
 //
-// UI audit changes: the filter panel is shown (#5), type and age group use
-// chips (#21), the price field accepts numbers only (#16), and dates and
-// pesos use the shared Formatters (#23).
+// Product cards show "Available on your date" when the customer filtered
+// by event date, or "Few dates left" when most of the next 30 days are
+// booked (item_busy_days, migration 0010).
 //
 // OWNER: Member 1.
 
@@ -11,13 +18,31 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
-import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/empty_view.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
+import 'package:orange150_rental/features/catalog/models/catalog_rules.dart';
 import 'package:orange150_rental/features/catalog/models/item_filter.dart';
 import 'package:orange150_rental/features/catalog/services/catalog_service.dart';
+import 'package:orange150_rental/features/catalog/widgets/category_row.dart';
+import 'package:orange150_rental/features/catalog/widgets/filter_sheet.dart';
+import 'package:orange150_rental/features/catalog/widgets/product_card.dart';
+import 'package:orange150_rental/features/catalog/widgets/product_grid_skeleton.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 
+/// Items plus the busy-day counts used for the tags.
+class _BrowseData {
+  const _BrowseData(this.items, this.busyDays);
+
+  final List<Item> items;
+  final Map<String, int> busyDays;
+}
+
+/// The Browse screen.
 class BrowseScreen extends StatefulWidget {
+  /// Creates the screen.
   const BrowseScreen({super.key});
 
   @override
@@ -25,487 +50,248 @@ class BrowseScreen extends StatefulWidget {
 }
 
 class _BrowseScreenState extends State<BrowseScreen> {
-  final CatalogService _catalogService = CatalogService();
+  final CatalogService _service = CatalogService();
+  final TextEditingController _search = TextEditingController();
 
-  final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _sizeController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController();
+  ItemFilter _filter = const ItemFilter();
+  late Future<_BrowseData> _future;
 
-  ItemType? _selectedType;
-  AgeGroup? _selectedAgeGroup;
-  DateTime? _selectedEventDate;
-  bool _showFilters = false;
-
-  List<Item> _items = [];
-  bool _isLoading = true;
-  String? _errorMessage;
+  /// Sizes for the filter sheet (loaded once; empty if it fails).
+  List<String> _sizes = const [];
 
   @override
   void initState() {
     super.initState();
-    _loadItems();
+    _future = _load();
+    _service.listSizes().then((s) {
+      if (mounted) setState(() => _sizes = s);
+    }, onError: (_) {});
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
-    _sizeController.dispose();
-    _priceController.dispose();
+    _search.dispose();
     super.dispose();
   }
 
-  Future<void> _loadItems() async {
+  /// Loads the items for [_filter] and, when no date is chosen, the busy
+  /// counts for "Few dates left".
+  Future<_BrowseData> _load() async {
+    final filter = _filter;
+    final results = await Future.wait<Object>([
+      _service.searchItems(filter),
+      if (filter.eventDate == null) _service.busyDays(),
+    ]);
+    return _BrowseData(
+      results[0] as List<Item>,
+      results.length > 1 ? results[1] as Map<String, int> : const {},
+    );
+  }
+
+  /// Applies a new filter and reloads.
+  void _apply(ItemFilter filter) {
     setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+      _filter = filter;
+      _future = _load();
     });
+  }
 
+  /// Pull to refresh.
+  Future<void> _refresh() async {
+    setState(() => _future = _load());
     try {
-      final priceText = _priceController.text.trim();
-      final maxPrice = priceText.isEmpty ? null : double.tryParse(priceText);
-
-      if (priceText.isNotEmpty && maxPrice == null) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'Please enter a valid maximum price.';
-        });
-        return;
-      }
-
-      final filter = ItemFilter(
-        query: _searchController.text.trim(),
-        type: _selectedType,
-        ageGroup: _selectedAgeGroup,
-        size: _sizeController.text.trim().isEmpty
-            ? null
-            : _sizeController.text.trim(),
-        maxPrice: maxPrice,
-        eventDate: _selectedEventDate,
-      );
-
-      final results = await _catalogService.searchItems(filter);
-
-      if (!mounted) return;
-
-      setState(() {
-        _items = results;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Unable to load items. Please try again.';
-      });
+      await _future;
+    } catch (_) {
+      // ErrorView shows it.
     }
   }
 
-  Future<void> _pickEventDate() async {
-    final today = DateTime.now();
-
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: _selectedEventDate ?? today,
-      firstDate: today,
-      lastDate: DateTime(today.year + 2),
+  Future<void> _openFilters() async {
+    final result = await showFilterSheet(
+      context,
+      current: _filter,
+      sizes: _sizes,
     );
-
-    if (pickedDate == null) return;
-
-    setState(() {
-      _selectedEventDate = pickedDate;
-    });
-
-    await _loadItems();
+    if (result != null) _apply(result);
   }
 
-  void _clearFilters() {
-    _searchController.clear();
-    _sizeController.clear();
-    _priceController.clear();
+  void _openItem(Item item) => context.pushNamed(
+    RouteNames.itemDetails,
+    pathParameters: {'itemId': item.id},
+  );
 
-    setState(() {
-      _selectedType = null;
-      _selectedAgeGroup = null;
-      _selectedEventDate = null;
-    });
-
-    _loadItems();
-  }
-
-  /// A labelled row of ChoiceChips: "All" plus one chip per option.
-  /// Picking "All" passes null to [onSelected].
-  Widget _choiceRow<T>({
-    required String label,
-    required String allLabel,
-    required List<T> options,
-    required String Function(T option) optionLabel,
-    required T? selected,
-    required ValueChanged<T?> onSelected,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 8,
-          children: [
-            ChoiceChip(
-              label: Text(allLabel),
-              selected: selected == null,
-              onSelected: (_) => onSelected(null),
-            ),
-            for (final option in options)
-              ChoiceChip(
-                label: Text(optionLabel(option)),
-                selected: selected == option,
-                onSelected: (_) => onSelected(option),
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      // Light grey page so the white cards stand out.
+      backgroundColor: theme.colorScheme.surfaceContainerLow,
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _searchBar(theme),
+            SliverToBoxAdapter(
+              child: Container(
+                color: theme.colorScheme.surface,
+                child: CategoryRow(
+                  filter: _filter,
+                  onTap: (category) => _apply(category.toggleIn(_filter)),
+                ),
               ),
+            ),
+            if (_filter.eventDate != null)
+              SliverToBoxAdapter(child: _dateBanner(theme)),
+            ..._results(),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Search field in a maroon bar that stays at the top (pinned).
+  Widget _searchBar(ThemeData theme) {
+    final active = _filter.activeCount;
+    return SliverAppBar(
+      pinned: true,
+      toolbarHeight: 68,
+      titleSpacing: 12,
+      title: TextField(
+        controller: _search,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (text) => _apply(_filter.copyWith(query: text.trim())),
+        style: const TextStyle(color: AppColors.textPrimary),
+        decoration: InputDecoration(
+          hintText: 'Search gowns, suits, barong…',
+          filled: true,
+          fillColor: theme.colorScheme.surface,
+          isDense: true,
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _search,
+            builder: (context, value, _) => value.text.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    tooltip: 'Clear search',
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _search.clear();
+                      _apply(_filter.copyWith(query: ''));
+                    },
+                  ),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(24),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+      actions: [
+        IconButton(
+          tooltip: active == 0 ? 'Filters' : 'Filters ($active on)',
+          onPressed: _openFilters,
+          icon: Badge(
+            isLabelVisible: active > 0,
+            label: Text('$active'),
+            backgroundColor: AppColors.gold,
+            textColor: AppColors.textPrimary,
+            child: const Icon(Icons.tune),
+          ),
+        ),
+        const SizedBox(width: 4),
       ],
     );
   }
 
-  Widget _buildFilters() {
-    return Card(
-      margin: const EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Filters',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  /// "Showing items free on Dec 24, 2026" with a clear button.
+  Widget _dateBanner(ThemeData theme) {
+    return Container(
+      color: AppColors.goldTint,
+      padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+      child: Row(
+        children: [
+          const Icon(Icons.event_available, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing items free on ${Formatters.date(_filter.eventDate!)}',
             ),
-            const SizedBox(height: 12),
-
-            // UI audit #21: 2-option filters are single-choice chips
-            // (All / Gown / Suit) instead of dropdowns, so every choice is
-            // visible and one tap away.
-            _choiceRow<ItemType>(
-              label: 'Item type',
-              allLabel: 'All types',
-              options: ItemType.values,
-              optionLabel: (type) => type.label,
-              selected: _selectedType,
-              onSelected: (type) => setState(() => _selectedType = type),
-            ),
-            const SizedBox(height: 12),
-
-            _choiceRow<AgeGroup>(
-              label: 'Age group',
-              allLabel: 'All ages',
-              options: AgeGroup.values,
-              optionLabel: (group) => group.label,
-              selected: _selectedAgeGroup,
-              onSelected: (group) => setState(() => _selectedAgeGroup = group),
-            ),
-
-            const SizedBox(height: 12),
-
-            TextField(
-              controller: _sizeController,
-              decoration: const InputDecoration(
-                labelText: 'Size',
-                hintText: 'e.g. S, M, L, XL',
-                border: OutlineInputBorder(),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            TextField(
-              controller: _priceController,
-              // UI audit #16: digits and one decimal point only.
-              inputFormatters: Validators.moneyFormatters,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Maximum rental price',
-                hintText: 'Enter budget',
-                prefixText: '₱ ',
-                border: OutlineInputBorder(),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            OutlinedButton.icon(
-              onPressed: _pickEventDate,
-              icon: const Icon(Icons.calendar_month),
-              label: Text(
-                _selectedEventDate == null
-                    ? 'Select event date'
-                    : 'Event date: ${Formatters.date(_selectedEventDate!)}',
-              ),
-            ),
-
-            if (_selectedEventDate != null)
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _selectedEventDate = null;
-                  });
-                },
-                child: const Text('Remove event date'),
-              ),
-
-            const SizedBox(height: 8),
-
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loadItems,
-                child: const Text('Apply Filters'),
-              ),
-            ),
-
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: _clearFilters,
-                child: const Text('Clear All Filters'),
-              ),
-            ),
-          ],
-        ),
+          ),
+          IconButton(
+            tooltip: 'Remove event date',
+            onPressed: () => _apply(_filter.copyWith(clearEventDate: true)),
+            icon: const Icon(Icons.close),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildItemCard(Item item) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          context.pushNamed(
-            RouteNames.itemDetails,
-            pathParameters: {'itemId': item.id},
+  /// Skeleton, error, empty or the grid, as slivers.
+  List<Widget> _results() {
+    return [
+      FutureBuilder<_BrowseData>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SliverPadding(
+              padding: EdgeInsets.all(8),
+              sliver: ProductGridSkeleton(),
+            );
+          }
+          if (snapshot.hasError) {
+            return SliverFillRemaining(
+              hasScrollBody: false,
+              child: ErrorView(
+                message: friendlyErrorMessage(
+                  snapshot.error!,
+                  fallback: 'Could not load items. Please try again.',
+                ),
+                onRetry: _refresh,
+              ),
+            );
+          }
+          final data = snapshot.requireData;
+          if (data.items.isEmpty) {
+            final filtered = _filter.activeCount > 0 || _filter.query != '';
+            return SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyView(
+                icon: Icons.search_off,
+                message: filtered
+                    ? 'No items match your search. Try other filters.'
+                    : 'No gowns or suits are available right now.',
+                actionLabel: filtered ? 'Clear filters' : null,
+                onAction: filtered
+                    ? () {
+                        _search.clear();
+                        _apply(const ItemFilter());
+                      }
+                    : null,
+              ),
+            );
+          }
+          return SliverPadding(
+            padding: const EdgeInsets.all(8),
+            sliver: SliverGrid.builder(
+              gridDelegate: productGridDelegate,
+              itemCount: data.items.length,
+              itemBuilder: (context, index) {
+                final item = data.items[index];
+                return ProductCard(
+                  item: item,
+                  onTap: () => _openItem(item),
+                  tag: AvailabilityRules.tagFor(
+                    searchedByDate: _filter.eventDate != null,
+                    busyDays: data.busyDays[item.id] ?? 0,
+                  ),
+                );
+              },
+            ),
           );
         },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 3 / 4,
-              child: item.photoUrls.isNotEmpty
-                  ? Image.network(
-                      item.photoUrls.first,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Icon(Icons.image_not_supported, size: 48),
-                        );
-                      },
-                    )
-                  : const Center(child: Icon(Icons.image, size: 48)),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-
-                  const SizedBox(height: 6),
-
-                  Text('${item.type.label} • ${item.ageGroup.label}'),
-
-                  const SizedBox(height: 4),
-
-                  Text('Size: ${item.size}'),
-
-                  const SizedBox(height: 8),
-
-                  Text(
-                    Formatters.peso(item.price), // "₱3,500.00" (#23)
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.arrow_forward, size: 16),
-                      SizedBox(width: 4),
-                      Text('View details'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
-    );
-  }
-
-  Widget _buildItemGrid() {
-    if (_items.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.search_off, size: 48),
-              SizedBox(height: 12),
-              Text('No items found.', style: TextStyle(fontSize: 18)),
-              SizedBox(height: 8),
-              Text(
-                'Try changing or clearing your filters.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-
-        final crossAxisCount = width >= 1000
-            ? 4
-            : width >= 650
-            ? 3
-            : width >= 400
-            ? 2
-            : 1;
-
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: crossAxisCount == 1 ? 0.55 : 0.45,
-          ),
-          itemCount: _items.length,
-          itemBuilder: (context, index) {
-            return _buildItemCard(_items[index]);
-          },
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Browse')),
-      body: RefreshIndicator(
-        onRefresh: _loadItems,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: (_) => _loadItems(),
-                        decoration: InputDecoration(
-                          hintText: 'Search gowns, suits...',
-                          prefixIcon: const Icon(Icons.search),
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.search),
-                            onPressed: _loadItems,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _showFilters = !_showFilters;
-                        });
-                      },
-                      icon: Icon(_showFilters ? Icons.close : Icons.tune),
-                      tooltip: _showFilters ? 'Close filters' : 'Open filters',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Theme.of(context)
-                            .colorScheme
-                            .primaryContainer,
-                        padding: const EdgeInsets.all(16),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // UI audit #5: show the real filter panel (type, age group,
-              // size, max price, event date). It used to show a leftover
-              // placeholder card, so no filter could be reached.
-              if (_showFilters) _buildFilters(),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: Text(
-                  '${_items.length} item(s) found',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.all(40),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_errorMessage != null)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.error_outline, size: 48),
-                        const SizedBox(height: 12),
-                        Text(_errorMessage!, textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: _loadItems,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                _buildItemGrid(),
-            ],
-          ),
-        ),
-      ),
-    );
+    ];
   }
 }
