@@ -3,6 +3,7 @@
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:orange150_rental/features/reservation/models/event_date_rules.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 
@@ -63,6 +64,34 @@ class ReservationService {
     };
   }
 
+  /// The signed-in customer's name and mobile, to pre-fill the checkout's
+  /// Contact details card. Returns empty strings when not set.
+  Future<({String fullName, String phone})> loadContact() async {
+    final userId = _requireUserId();
+    final row = await _client
+        .from('profiles')
+        .select('full_name, phone')
+        .eq('id', userId)
+        .maybeSingle();
+    return (
+      fullName: (row?['full_name'] as String? ?? '').trim(),
+      phone: (row?['phone'] as String? ?? '').trim(),
+    );
+  }
+
+  /// Saves the name and mobile from the checkout to the customer's profile
+  /// (only these two columns may be updated, see 0001 / 0006).
+  Future<void> saveContact({
+    required String fullName,
+    required String phone,
+  }) async {
+    final userId = _requireUserId();
+    await _client
+        .from('profiles')
+        .update({'full_name': fullName.trim(), 'phone': phone.trim()})
+        .eq('id', userId);
+  }
+
   /// The customer's saved measurements (to prefill step 2), or null.
   Future<Map<String, dynamic>?> loadSavedMeasurements() async {
     final userId = _requireUserId();
@@ -93,10 +122,8 @@ class ReservationService {
   /// Earliest event date a customer can choose: 2 days from today, so the
   /// pick-up (day before) is tomorrow or later and the 48-hour payment
   /// deadline ends before pick-up day (see 0009_create_reservation.sql).
-  static DateTime earliestEventDate([DateTime? now]) {
-    final base = now ?? DateTime.now();
-    return DateTime(base.year, base.month, base.day + 2);
-  }
+  static DateTime earliestEventDate([DateTime? now]) =>
+      EventDateRules.earliestEventDate(now);
 
   /// Creates a pending booking with its item and returns it.
   ///
