@@ -19,6 +19,7 @@ import 'package:orange150_rental/core/config/rental_terms.dart';
 import 'package:orange150_rental/core/config/shop_contact.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 
 /// Read-only agreement document.
 class AgreementDocument extends StatelessWidget {
@@ -220,7 +221,8 @@ Future<void> showSignedAgreement(
     MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (context) => Scaffold(
-        appBar: AppBar(title: const Text('Signed rental agreement')),
+        // Customer redesign 2: shared header with the Orange 150 mark (H4).
+        appBar: const BrandAppBar(title: 'Signed rental agreement'),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
