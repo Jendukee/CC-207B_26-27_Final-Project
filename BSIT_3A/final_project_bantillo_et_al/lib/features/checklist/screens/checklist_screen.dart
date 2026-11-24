@@ -28,6 +28,8 @@ import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
 import 'package:orange150_rental/features/checklist/models/checklist_booking.dart';
 import 'package:orange150_rental/features/checklist/models/checklist_kind.dart';
@@ -303,6 +305,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         title: Text(_isRelease ? 'Release Checklist' : 'Return Checklist'),
       ),
       body: _buildBody(),
+      bottomNavigationBar: _bottomBar(),
     );
   }
 
@@ -516,16 +519,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   }
 
   /// Error with Retry, progress while saving, and the main button.
+  /// Save error (with Retry) and upload progress, at the end of the form.
+  /// The button itself is in the sticky bottom bar (_bottomBar).
   Widget _saveArea(ChecklistBooking booking) {
-    final blockedReason = _isRelease
-        ? ChecklistRules.releaseBlockedReason(
-            lines: _lines,
-            ticked: _ticked,
-            balance: booking.booking.balance,
-          )
-        : null;
-    final canPress = !_saving && blockedReason == null;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -540,60 +536,57 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        if (_saving) ...[
-          const LinearProgressIndicator(),
-          const SizedBox(height: 8),
-          Text(_progress, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-        ],
-        if (blockedReason != null && !_saving)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(blockedReason, textAlign: TextAlign.center),
-          ),
-        FilledButton.icon(
-          onPressed: canPress ? _save : null,
-          icon: Icon(
-            _isRelease ? Icons.outbox_outlined : Icons.assignment_return,
-          ),
-          label: Text(_isRelease ? 'Release items' : 'Mark returned'),
-        ),
+        if (_saving) const LinearProgressIndicator(),
       ],
     );
   }
 
-  /// A titled card section.
+  /// A titled card section. Customer redesign: drawn by the shared core
+  /// SectionCard so staff and customer cards look the same.
   Widget _card({
     required String title,
     required IconData icon,
     required List<Widget> children,
     Widget? trailing,
   }) {
-    final theme = Theme.of(context);
-    return Card(
+    return SectionCard(
+      title: title,
+      icon: icon,
+      trailing: trailing,
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(title, style: theme.textTheme.titleMedium),
-                  ),
-                ),
-                ?trailing,
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...children,
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  /// Sticky bottom bar with "Release items" / "Mark returned" (shared
+  /// StickyActionBar). Above the button it says why it is disabled.
+  Widget? _bottomBar() {
+    final booking = _booking;
+    if (_loading || _loadError != null || booking == null) return null;
+    if (booking.booking.status != _requiredStatus) return null;
+    final blockedReason = _isRelease
+        ? ChecklistRules.releaseBlockedReason(
+            lines: _lines,
+            ticked: _ticked,
+            balance: booking.booking.balance,
+          )
+        : null;
+    return StickyActionBar(
+      message: _saving ? _progress : blockedReason,
+      action: FilledButton.icon(
+        onPressed: !_saving && blockedReason == null ? _save : null,
+        icon: _saving
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                _isRelease ? Icons.outbox_outlined : Icons.assignment_return,
+              ),
+        label: Text(_isRelease ? 'Release items' : 'Mark returned'),
       ),
     );
   }
