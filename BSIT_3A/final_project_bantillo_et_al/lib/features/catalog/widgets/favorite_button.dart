@@ -127,6 +127,9 @@ Future<void> toggleFavorite(
     ..showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 3),
+        // Flutter keeps a snackbar with an action on screen until it is
+        // tapped. persist: false makes it close after [duration] anyway.
+        persist: false,
         content: Text(saving ? 'Saved to favorites' : 'Removed from favorites'),
         action: saving || undoOnRemove
             ? SnackBarAction(
