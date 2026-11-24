@@ -1,17 +1,33 @@
-// Customer booking details: items, dates, payments, balance and status.
-// Allows cancelling a pending or reserved booking (with a confirm dialog).
+// Customer booking details, laid out like an order page (customer
+// redesign, Phase 1):
+//   * a maroon status banner that says what to do next
+//   * a vertical timeline: Requested, Reserved, Picked up, Returned
+//   * Item, Rental schedule and Payment cards (paid, balance, method)
+//   * the signed agreement summary (version and date; Phase 2 adds the
+//     typed signature)
+//   * "Contact the shop" and, while allowed, "Cancel booking" (asks first)
 //
 // OWNER: Member 2.
 
 import 'package:flutter/material.dart';
 
+import 'package:orange150_rental/core/config/rental_terms.dart';
+import 'package:orange150_rental/core/config/shop_contact.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
-
+import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/features/my_bookings/models/booking_details.dart';
+import 'package:orange150_rental/features/my_bookings/models/my_booking.dart';
 import 'package:orange150_rental/features/my_bookings/services/my_bookings_service.dart';
 import 'package:orange150_rental/features/my_bookings/widgets/booking_formatters.dart';
 import 'package:orange150_rental/features/my_bookings/widgets/booking_status_badge.dart';
-import 'package:orange150_rental/features/my_bookings/widgets/detail_section.dart';
+import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
+import 'package:orange150_rental/shared/models/booking.dart';
+import 'package:orange150_rental/shared/models/booking_status.dart';
+import 'package:orange150_rental/shared/models/payment.dart';
 
 class CustomerBookingDetailsScreen extends StatefulWidget {
   const CustomerBookingDetailsScreen({super.key, required this.bookingId});
@@ -37,9 +53,16 @@ class _CustomerBookingDetailsScreenState
   }
 
   Future<BookingDetails> _load() async {
-    final myBooking = await _service.getBooking(widget.bookingId);
-    final payments = await _service.listPayments(widget.bookingId);
-    return BookingDetails(myBooking: myBooking, payments: payments);
+    final results = await Future.wait<Object>([
+      _service.getBooking(widget.bookingId),
+      _service.listPayments(widget.bookingId),
+      _service.checklistDates(widget.bookingId),
+    ]);
+    return BookingDetails(
+      myBooking: results[0] as MyBooking,
+      payments: results[1] as List<Payment>,
+      checklistDates: results[2] as Map<String, DateTime>,
+    );
   }
 
   Future<void> _confirmCancel() async {
@@ -54,6 +77,7 @@ class _CustomerBookingDetailsScreenState
             child: const Text('Keep booking'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.deepRed),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Cancel booking'),
           ),
@@ -81,103 +105,343 @@ class _CustomerBookingDetailsScreenState
     }
   }
 
+  /// The banner's "what to do next" text for each displayed status.
+  static String nextStep(Booking b) {
+    final payNow = PaymentPlan.dueNow(b.totalAmount, b.paymentOption);
+    final deadline = b.expiresAt;
+    return switch (b.displayStatus()) {
+      BookingStatus.pending =>
+        'Pay ${formatPeso(payNow)}'
+            '${deadline == null ? '' : ' by ${Formatters.dateTime(deadline)}'}'
+            ' to reserve your dates. GCash: ${ShopContact.gcash}.',
+      BookingStatus.reserved =>
+        'Reserved! Pick up on ${formatDate(b.pickupDate)} at the shop.'
+            '${b.balance > 0 ? ' Bring the balance of ${formatPeso(b.balance)}.' : ''}',
+      BookingStatus.rentedOut =>
+        'Enjoy your event! Please return it by ${formatDate(b.returnDate)}.',
+      BookingStatus.returned => 'Returned. Thank you for renting with us!',
+      BookingStatus.cancelled => 'This booking was cancelled.',
+      BookingStatus.expired =>
+        'This request expired because it was not paid in time.',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainerLow,
       appBar: AppBar(title: const Text('Booking Details')),
       body: FutureBuilder<BookingDetails>(
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingView(message: 'Loading booking...');
           }
-          // UI audit #15: the error state now has a Retry button.
+          // UI audit #15: the error state has a Retry button.
           if (snap.hasError) {
             return ErrorView(
               message: 'Could not load this booking. Please try again.',
               onRetry: () => setState(() => _future = _load()),
             );
           }
-          final d = snap.data!;
-          final b = d.booking;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              DetailSection(
-                title: 'Booking ${b.referenceNo}',
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: BookingStatusBadge(status: b.displayStatus()),
-                  ),
-                ],
-              ),
-              DetailSection(
-                title: 'Items',
-                children: [
-                  if (d.items.isEmpty) const Text('No items found.'),
-                  for (final item in d.items)
-                    Text('${item.name} (${item.size})'),
-                ],
-              ),
-              DetailSection(
-                title: 'Dates',
-                children: [
-                  Text('Pickup: ${formatDate(b.pickupDate)}'),
-                  Text('Event: ${formatDate(b.eventDate)}'),
-                  Text('Return: ${formatDate(b.returnDate)}'),
-                ],
-              ),
-              DetailSection(
-                title: 'Payments',
-                children: [
-                  Text('Option: ${b.paymentOption.label}'),
-                  const SizedBox(height: 4),
-                  if (d.payments.isEmpty)
-                    const Text('No payments recorded yet.'),
-                  for (final p in d.payments)
-                    Text(
-                      // methodLabel: "GCash", not the database value "gcash".
-                      '${formatPeso(p.amount)} • ${p.kind.label} • '
-                      '${p.methodLabel}'
-                      ' • ${formatDateOrDash(p.createdAt)}',
-                    ),
-                ],
-              ),
-              DetailSection(
-                title: 'Summary',
-                children: [
-                  Text('Total: ${formatPeso(b.totalAmount)}'),
-                  Text('Paid: ${formatPeso(b.amountPaid)}'),
-                  Text(
-                    'Balance: ${formatPeso(b.balance)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  // UI audit #8: payment deadline for pending requests.
-                  if (payByText(b) != null)
-                    Text(
-                      payByText(b)!,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                ],
-              ),
-              if (d.canCancel) ...[
-                const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: _cancelling ? null : _confirmCancel,
-                  child: _cancelling
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Cancel booking'),
-                ),
-              ],
-            ],
-          );
+          return _content(snap.data!, theme);
         },
       ),
+    );
+  }
+
+  Widget _content(BookingDetails d, ThemeData theme) {
+    final b = d.booking;
+    const gap = EdgeInsets.fromLTRB(8, 0, 8, 8);
+    return RefreshIndicator(
+      onRefresh: () async {
+        setState(() => _future = _load());
+        await _future.catchError((_) => d);
+      },
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          // Status banner: what to do next.
+          Container(
+            color: AppColors.maroon,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        b.displayStatus().label,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: AppColors.onMaroon,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Ref ${b.referenceNo}',
+                      style: const TextStyle(color: AppColors.onMaroon),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  nextStep(b),
+                  style: const TextStyle(color: AppColors.onMaroon),
+                ),
+              ],
+            ),
+          ),
+
+          SectionCard(
+            title: 'Progress',
+            icon: Icons.timeline,
+            margin: gap,
+            child: _Timeline(steps: d.timeline),
+          ),
+
+          SectionCard(
+            title: 'Item',
+            icon: Icons.checkroom_outlined,
+            margin: gap,
+            trailing: BookingStatusBadge(status: b.displayStatus()),
+            child: Column(
+              children: [
+                if (d.items.isEmpty) const Text('No items found.'),
+                for (final item in d.items)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: SizedBox.square(
+                        dimension: 56,
+                        child: item.photoUrls.isEmpty
+                            ? const Icon(Icons.checkroom)
+                            : Image.network(
+                                item.photoUrls.first,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    const Icon(Icons.checkroom),
+                              ),
+                      ),
+                    ),
+                    title: Text(item.name),
+                    subtitle: Text('${item.type.label} · Size ${item.size}'),
+                  ),
+              ],
+            ),
+          ),
+
+          SectionCard(
+            title: 'Rental schedule',
+            icon: Icons.event_outlined,
+            margin: gap,
+            child: Column(
+              children: [
+                _row('Pick-up', formatDate(b.pickupDate)),
+                _row('Event', formatDate(b.eventDate)),
+                _row('Return', formatDate(b.returnDate)),
+              ],
+            ),
+          ),
+
+          SectionCard(
+            title: 'Payment',
+            icon: Icons.payments_outlined,
+            margin: gap,
+            child: Column(
+              children: [
+                _row('Option', b.paymentOption.label),
+                _row('Total', formatPeso(b.totalAmount)),
+                _row('Paid', formatPeso(b.amountPaid)),
+                _row('Balance', formatPeso(b.balance), bold: true),
+                if (d.payments.isNotEmpty) _row('Method', d.methodsUsed),
+                if (payByText(b) != null) _row('Deadline', payByText(b)!),
+                if (d.payments.isNotEmpty) const Divider(),
+                for (final p in d.payments)
+                  _row(
+                    '${p.kind.label} · ${formatDateOrDash(p.createdAt)}',
+                    formatPeso(p.amount),
+                  ),
+              ],
+            ),
+          ),
+
+          SectionCard(
+            title: 'Rental agreement',
+            icon: Icons.assignment_turned_in_outlined,
+            margin: gap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  b.termsAcknowledgedAt == null
+                      ? 'No signed agreement is saved for this booking.'
+                      : 'You agreed to the rental terms'
+                            '${b.termsVersion == null ? '' : ' (version ${b.termsVersion})'}'
+                            ' on ${Formatters.dateTime(b.termsAcknowledgedAt!)}.',
+                ),
+                TextButton(
+                  onPressed: () => _showTerms(context),
+                  child: const Text('View rental terms'),
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const ContactShopButton(outlined: true),
+                if (d.canCancel) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.deepRed,
+                    ),
+                    onPressed: _cancelling ? null : _confirmCancel,
+                    child: _cancelling
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Cancel booking'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, String value, {bool bold = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: Text(label)),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Shows the shop's numbered rental terms.
+void _showTerms(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Rental terms'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < RentalTerms.items.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('${i + 1}. ${RentalTerms.items[i]}'),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Vertical timeline. Reached steps have a filled maroon check and their
+/// date; later steps an empty circle and "Not yet".
+class _Timeline extends StatelessWidget {
+  const _Timeline({required this.steps});
+
+  final List<TimelineStep> steps;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        for (var i = 0; i < steps.length; i++)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 28,
+                  child: Column(
+                    children: [
+                      Icon(
+                        steps[i].done
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        color: steps[i].done
+                            ? AppColors.maroon
+                            : theme.colorScheme.onSurfaceVariant,
+                        size: 22,
+                      ),
+                      // Line down to the next step.
+                      if (i < steps.length - 1)
+                        Expanded(
+                          child: Container(
+                            width: 2,
+                            color: steps[i + 1].done
+                                ? AppColors.maroon
+                                : theme.dividerColor,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          steps[i].label,
+                          style: TextStyle(
+                            fontWeight: steps[i].done
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                        Text(
+                          steps[i].done
+                              ? Formatters.dateTime(steps[i].date!)
+                              : 'Not yet',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
