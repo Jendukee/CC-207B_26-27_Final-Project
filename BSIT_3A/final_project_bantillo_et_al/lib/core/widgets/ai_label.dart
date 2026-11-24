@@ -27,8 +27,9 @@ class AiLabel extends StatelessWidget {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Gold is used for the icon only; the text stays near-black.
-            Icon(Icons.auto_awesome, size: 16, color: AppColors.gold),
+            // UI audit #39: maroon icon (gold on the gold tint was below
+            // 3:1); the text label carries the meaning.
+            Icon(Icons.auto_awesome, size: 16, color: AppColors.maroon),
             SizedBox(width: 4),
             Text(
               'AI-generated',
