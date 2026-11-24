@@ -11,8 +11,14 @@ enum ItemType {
   /// Gowns (debut, wedding, prom, Filipiniana, etc.).
   gown('gown', 'Gown'),
 
+  /// Long gowns (added in the customer redesign, migration 0010).
+  longGown('long_gown', 'Long gown'),
+
   /// Suits and barong.
-  suit('suit', 'Suit');
+  suit('suit', 'Suit'),
+
+  /// Ring bearer / junior entourage outfits (migration 0010).
+  bearer('bearer', 'Bearer');
 
   const ItemType(this.dbValue, this.label);
 
@@ -143,14 +149,14 @@ class Item {
 
   /// Row for insert/update. `id` and `created_at` are left to the database.
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'type': type.dbValue,
-        'age_group': ageGroup.dbValue,
-        'size': size,
-        'price': price,
-        'description': description,
-        'inclusions': inclusions,
-        'photo_urls': photoUrls,
-        'condition': condition.dbValue,
-      };
+    'name': name,
+    'type': type.dbValue,
+    'age_group': ageGroup.dbValue,
+    'size': size,
+    'price': price,
+    'description': description,
+    'inclusions': inclusions,
+    'photo_urls': photoUrls,
+    'condition': condition.dbValue,
+  };
 }
