@@ -1,8 +1,13 @@
+// Staff form to add or edit a rentable item (name, type, age group, size,
+// price, condition, description, inclusions, photos).
+//
+// OWNER: Member 1.
 
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
 
@@ -38,6 +43,12 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
   bool _isLoading = false;
   bool _isSaving = false;
+
+  /// UI audit #11: two separate errors.
+  /// [_loadError]: the item could not be loaded (full-screen error + Retry).
+  /// [_errorMessage]: saving failed (shown above the Save button; the form
+  /// and everything the user typed stay on screen).
+  String? _loadError;
   String? _errorMessage;
 
   @override
@@ -62,14 +73,12 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   Future<void> _loadItem() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _loadError = null;
     });
 
     try {
       final items = await _service.listItems(includeRetired: true);
-      final item = items.firstWhere(
-        (item) => item.id == widget.itemId,
-      );
+      final item = items.firstWhere((item) => item.id == widget.itemId);
 
       if (!mounted) return;
 
@@ -91,7 +100,10 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = e.toString();
+        _loadError = friendlyErrorMessage(
+          e,
+          fallback: 'Could not load this item. Please try again.',
+        );
         _isLoading = false;
       });
     }
@@ -109,9 +121,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to select photos: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Unable to select photos: $e')));
     }
   }
 
@@ -213,8 +224,14 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     } catch (e) {
       if (!mounted) return;
 
+      // Shown above the Save button; the form keeps the user's edits.
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = friendlyErrorMessage(
+          e,
+          fallback:
+              'Could not save this item. Check your connection and '
+              'press Save again.',
+        );
       });
     } finally {
       if (mounted) {
@@ -257,10 +274,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                       child: Image.network(
                         url,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.broken_image,
-                          size: 48,
-                        ),
+                        errorBuilder: (_, _, _) =>
+                            const Icon(Icons.broken_image, size: 48),
                       ),
                     ),
                     Positioned(
@@ -347,10 +362,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
               border: OutlineInputBorder(),
             ),
             items: ItemType.values.map((type) {
-              return DropdownMenuItem(
-                value: type,
-                child: Text(type.label),
-              );
+              return DropdownMenuItem(value: type, child: Text(type.label));
             }).toList(),
             onChanged: (value) {
               if (value != null) {
@@ -368,10 +380,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
               border: OutlineInputBorder(),
             ),
             items: AgeGroup.values.map((group) {
-              return DropdownMenuItem(
-                value: group,
-                child: Text(group.label),
-              );
+              return DropdownMenuItem(value: group, child: Text(group.label));
             }).toList(),
             onChanged: (value) {
               if (value != null) {
@@ -464,10 +473,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
           _buildPhotoSection(),
           const SizedBox(height: 24),
           if (_errorMessage != null) ...[
-            Text(
-              _errorMessage!,
-              style: const TextStyle(color: Colors.red),
-            ),
+            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 12),
           ],
           SizedBox(
@@ -493,32 +499,28 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Item' : 'Add Item'),
-      ),
+      appBar: AppBar(title: Text(widget.isEditing ? 'Edit Item' : 'Add Item')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null && widget.isEditing
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _errorMessage!,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadItem,
-                          child: const Text('Retry'),
-                        ),
-                      ],
+          // Only a failed LOAD replaces the form; a failed save does not.
+          : _loadError != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_loadError!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _loadItem,
+                      child: const Text('Retry'),
                     ),
-                  ),
-                )
-              : _buildForm(),
+                  ],
+                ),
+              ),
+            )
+          : _buildForm(),
     );
   }
 }
