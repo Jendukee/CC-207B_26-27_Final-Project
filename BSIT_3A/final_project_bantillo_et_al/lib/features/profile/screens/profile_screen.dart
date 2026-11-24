@@ -69,6 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context,
       fullName: profile.fullName,
       phone: profile.phone,
+      address: profile.address,
     );
     if (update == null || !mounted) return;
 
@@ -77,6 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _service.updateContact(
         fullName: update.fullName,
         phone: update.phone,
+        address: update.address,
       );
       await SessionController.instance.reload();
       if (!mounted) return;
@@ -326,7 +328,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _tile(
                   Icons.contact_phone_outlined,
                   'Contact details',
-                  phone.isEmpty ? 'Add your mobile number' : phone,
+                  // Mobile and address (Phase 2), or a prompt to add them.
+                  _contactSummary(phone, profile.address),
                   () => _editContact(profile),
                 ),
                 const Divider(height: 1),
@@ -363,6 +366,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  /// "09171234567 · Jaro, Iloilo City", or a prompt when both are empty.
+  static String _contactSummary(String phone, String? address) {
+    final parts = [
+      if (phone.isNotEmpty) phone,
+      if ((address ?? '').trim().isNotEmpty) address!.trim(),
+    ];
+    return parts.isEmpty
+        ? 'Add your mobile number and address'
+        : parts.join(' · ');
   }
 
   static const Map<CustomerBookingTab, IconData> _tabIcons = {
