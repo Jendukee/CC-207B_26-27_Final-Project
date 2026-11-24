@@ -124,4 +124,17 @@ class Booking {
   /// Amount still owed in pesos (never negative).
   double get balance =>
       (totalAmount - amountPaid).clamp(0, double.infinity).toDouble();
+
+  /// The status to SHOW (UI audit #14): a pending booking past its payment
+  /// deadline ([expiresAt]) is shown as Expired, on the customer and staff
+  /// side alike, even though the database row still says pending.
+  /// [now] can be fixed in tests.
+  BookingStatus displayStatus([DateTime? now]) {
+    final deadline = expiresAt;
+    final pastDeadline =
+        status == BookingStatus.pending &&
+        deadline != null &&
+        deadline.isBefore(now ?? DateTime.now());
+    return pastDeadline ? BookingStatus.expired : status;
+  }
 }
