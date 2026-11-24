@@ -1,5 +1,12 @@
+// AI style assistant chat (Gemini through the ai-assistant edge function).
+// The banner at the top marks replies as AI-generated and always shows a
+// "Contact the shop" button (UI audit #9).
+//
+// OWNER: Member 1.
 
 import 'package:flutter/material.dart';
+
+import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/features/assistant/services/assistant_service.dart';
 
 class AssistantScreen extends StatefulWidget {
@@ -148,10 +155,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 Text('Style Assistant'),
                 Text(
                   'Orange 150',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.normal,
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
                 ),
               ],
             ),
@@ -163,10 +167,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
           Container(
             width: double.infinity,
             color: Colors.orange.shade50,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 10,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
                 Icon(
@@ -182,6 +183,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
+                // UI audit #9: a human fallback, always visible at the top
+                // of the chat (opens a dialog with Call and Copy).
+                const ContactShopButton(),
               ],
             ),
           ),
@@ -239,27 +243,16 @@ class _AssistantScreenState extends State<AssistantScreen> {
     final isUser = message.isUser;
 
     return Align(
-      alignment: isUser
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 320),
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isUser
-              ? Colors.deepOrange.shade600
-              : Colors.grey.shade100,
+          color: isUser ? Colors.deepOrange.shade600 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(18).copyWith(
-            bottomRight: isUser
-                ? const Radius.circular(4)
-                : null,
-            bottomLeft: !isUser
-                ? const Radius.circular(4)
-                : null,
+            bottomRight: isUser ? const Radius.circular(4) : null,
+            bottomLeft: !isUser ? const Radius.circular(4) : null,
           ),
         ),
         child: Column(
@@ -333,9 +326,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          border: Border(
-            top: BorderSide(color: Colors.grey.shade200),
-          ),
+          border: Border(top: BorderSide(color: Colors.grey.shade200)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
