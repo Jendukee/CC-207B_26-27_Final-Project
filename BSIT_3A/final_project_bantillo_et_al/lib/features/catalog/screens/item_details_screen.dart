@@ -11,6 +11,10 @@
 //     then the checkout opens: /reserve/:itemId/checkout?date=yyyy-MM-dd
 //     (route defined in reservation_routes.dart; opened by path only)
 //
+// Customer redesign 2 (Phase 1): the shared BrandAppBar with a favorites
+// heart in the header actions (H4, H7); guests reach Login with push, so
+// Back returns here (H3).
+//
 // OWNER: Member 1.
 
 import 'package:flutter/material.dart';
@@ -21,12 +25,14 @@ import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/catalog/services/catalog_service.dart';
 import 'package:orange150_rental/features/catalog/widgets/availability_calendar.dart';
+import 'package:orange150_rental/features/catalog/widgets/favorite_button.dart';
 import 'package:orange150_rental/features/catalog/widgets/photo_carousel.dart';
 import 'package:orange150_rental/features/catalog/widgets/reserve_date_sheet.dart';
 import 'package:orange150_rental/core/utils/event_date_rules.dart';
@@ -90,7 +96,15 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     // Guests sign in first and come back to this item.
     if (!SessionController.instance.isSignedIn) {
       final here = GoRouterState.of(context).uri.toString();
-      context.goNamed(RouteNames.login, queryParameters: {'from': here});
+      // push (not go), so Back from Login returns to this item without
+      // reserving (H3). The reason makes Login say why (H2).
+      context.pushNamed(
+        RouteNames.login,
+        queryParameters: {
+          'from': here,
+          LoginReasons.param: LoginReasons.reserve,
+        },
+      );
       return;
     }
     final chosen = await showReserveDateSheet(
@@ -118,7 +132,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         final data = snapshot.data;
         return Scaffold(
           backgroundColor: theme.colorScheme.surfaceContainerLow,
-          appBar: AppBar(title: const Text('Item details')),
+          // Customer redesign 2: shared header (H4) with the favorites heart.
+          appBar: BrandAppBar(
+            title: 'Item details',
+            actions: [
+              FavoriteButton(itemId: widget.itemId, itemName: data?.item.name),
+              const SizedBox(width: 4),
+            ],
+          ),
           body: switch (snapshot.connectionState) {
             ConnectionState.done when snapshot.hasError => ErrorView(
               message: friendlyErrorMessage(
