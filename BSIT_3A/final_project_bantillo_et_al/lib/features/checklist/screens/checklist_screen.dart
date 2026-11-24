@@ -16,6 +16,10 @@
 // save_checklist is called. If anything fails, an error with Retry is
 // shown; photos already uploaded are not uploaded again.
 //
+// Shop-side redesign (Phase 2): light grey page under the white section
+// cards, and the sticky bar shows the balance (release) or the penalty
+// (return) on the left and the main action on the right (H1, H4).
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -316,6 +320,8 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Shop-side redesign: light grey page under the white cards (H4).
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(
         title: _isRelease ? 'Release Checklist' : 'Return Checklist',
@@ -519,6 +525,8 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         TextFormField(
           controller: _penalty,
           enabled: !_saving,
+          // Phase 2: rebuild so the bottom bar's penalty follows the field.
+          onChanged: (_) => setState(() {}),
           // UI audit #16: digits and one decimal point (max 2 decimals).
           inputFormatters: Validators.moneyFormatters,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -614,8 +622,32 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             balance: booking.booking.balance,
           )
         : null;
+    // Shop-side redesign (Phase 2): the amount that matters on the left,
+    // like Record payment and the customer checkout (H1, H4): the balance
+    // still owed at release, or the penalty being charged at return.
+    final theme = Theme.of(context);
+    final amount = _isRelease
+        ? booking.booking.balance
+        : ChecklistRules.parsePenalty(_penalty.text);
     return StickyActionBar(
       message: _saving ? _progress : blockedReason,
+      leading: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isRelease ? 'Balance' : 'Penalty',
+            style: theme.textTheme.bodySmall,
+          ),
+          Text(
+            Formatters.peso(amount),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: amount > 0 ? AppColors.deepRed : AppColors.success,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
       action: FilledButton.icon(
         onPressed: !_saving && blockedReason == null ? _save : null,
         icon: _saving
