@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/widgets/ai_label.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/features/assistant/services/assistant_service.dart';
 
@@ -144,32 +145,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.goldTint,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.auto_awesome, color: AppColors.maroon),
-            ),
-            const SizedBox(width: 12),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Assistant'), // matches the tab label (UI audit #38)
-                Text(
-                  'Orange 150',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      // Customer redesign 2: the shared header with the Orange 150 mark
+      // (H4). It replaces the sparkle avatar and the "Orange 150" subtitle,
+      // which the mark now shows (H8). The title still matches the tab
+      // label (UI audit #38); the AI banner below says it is AI.
+      appBar: const BrandAppBar(title: 'Assistant'),
       body: Column(
         children: [
           Container(
