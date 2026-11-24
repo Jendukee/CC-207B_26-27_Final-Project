@@ -49,6 +49,13 @@ class Booking {
     this.termsAcknowledgedAt,
     this.expiresAt,
     this.createdAt,
+    this.signedName,
+    this.termsSnapshot,
+    this.customerAddress,
+    this.facebookAccount,
+    this.preferredFittingDate,
+    this.notes,
+    this.preferredPaymentMethod,
   });
 
   /// Builds a booking from a Supabase row.
@@ -73,6 +80,14 @@ class Booking {
       termsAcknowledgedAt: optionalDate('terms_acknowledged_at'),
       expiresAt: optionalDate('expires_at'),
       createdAt: optionalDate('created_at'),
+      // E-contract columns (migration 0011); null on older bookings.
+      signedName: map['signed_name'] as String?,
+      termsSnapshot: map['terms_snapshot'] as Map<String, dynamic>?,
+      customerAddress: map['customer_address'] as String?,
+      facebookAccount: map['facebook_account'] as String?,
+      preferredFittingDate: optionalDate('preferred_fitting_date'),
+      notes: map['notes'] as String?,
+      preferredPaymentMethod: map['preferred_payment_method'] as String?,
     );
   }
 
@@ -120,6 +135,31 @@ class Booking {
 
   /// When the booking was created.
   final DateTime? createdAt;
+
+  /// Full name the customer typed to sign the e-contract.
+  final String? signedName;
+
+  /// The exact terms and shop details shown when the customer signed:
+  /// {"version", "terms": [...], "shop": {...}, "form": {...}}.
+  final Map<String, dynamic>? termsSnapshot;
+
+  /// Address given at checkout (optional).
+  final String? customerAddress;
+
+  /// Facebook account the shop may use to reach the customer (optional).
+  final String? facebookAccount;
+
+  /// Preferred fitting date (optional; arranged with the shop if null).
+  final DateTime? preferredFittingDate;
+
+  /// Note from the customer on the form (optional).
+  final String? notes;
+
+  /// cash / gcash / bank, chosen at checkout (optional).
+  final String? preferredPaymentMethod;
+
+  /// True when the e-contract was signed with a typed name.
+  bool get isSigned => (signedName ?? '').trim().isNotEmpty;
 
   /// Amount still owed in pesos (never negative).
   double get balance =>
