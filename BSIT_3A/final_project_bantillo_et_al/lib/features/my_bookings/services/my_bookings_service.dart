@@ -62,11 +62,9 @@ class MyBookingsService {
     };
   }
 
-  /// Cancels a pending or reserved booking (RPC cancel_my_booking).
+  /// Cancels a PENDING booking (RPC cancel_my_booking; since 0013 the
+  /// database rejects Reserved bookings as non-refundable).
   Future<void> cancelBooking(String bookingId) async {
-    await _client.rpc(
-      'cancel_my_booking',
-      params: {'p_booking_id': bookingId}, // ASSUMED: parameter name
-    );
+    await _client.rpc('cancel_my_booking', params: {'p_booking_id': bookingId});
   }
 }

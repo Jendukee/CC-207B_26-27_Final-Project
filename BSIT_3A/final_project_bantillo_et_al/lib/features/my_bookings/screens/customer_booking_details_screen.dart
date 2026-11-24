@@ -14,11 +14,13 @@ import 'package:flutter/material.dart';
 import 'package:orange150_rental/core/config/rental_terms.dart';
 import 'package:orange150_rental/core/config/shop_contact.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/agreement_document.dart';
 import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/payment_instructions.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/features/my_bookings/models/booking_details.dart';
 import 'package:orange150_rental/features/my_bookings/models/my_booking.dart';
@@ -97,12 +99,22 @@ class _CustomerBookingDetailsScreenState
         _cancelling = false;
         _future = _load();
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _cancelling = false);
+      // Phase 3: show the database's reason (e.g. the booking was paid
+      // and is now Reserved, so it is non-refundable).
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not cancel. Please try again.')),
+        SnackBar(
+          content: Text(
+            friendlyErrorMessage(
+              e,
+              fallback: 'Could not cancel. Please try again.',
+            ),
+          ),
+        ),
       );
+      setState(() => _future = _load());
     }
   }
 
@@ -270,6 +282,20 @@ class _CustomerBookingDetailsScreenState
             ),
           ),
 
+          // Phase 3: a booking waiting for payment shows how to pay, with the
+          // GCash number and shop contact numbers pre-filled (the same card as
+          // the "Request submitted" screen).
+          if (b.displayStatus() == BookingStatus.pending)
+            SectionCard(
+              title: 'How to pay',
+              icon: Icons.account_balance_wallet_outlined,
+              margin: gap,
+              child: PaymentInstructions(
+                method: b.preferredPaymentMethod,
+                referenceNo: b.referenceNo,
+              ),
+            ),
+
           SectionCard(
             title: 'Rental agreement',
             icon: Icons.assignment_turned_in_outlined,
@@ -321,7 +347,33 @@ class _CustomerBookingDetailsScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Phase 3: a Reserved booking cannot be cancelled by the
+                // customer; this explains why and points to the shop.
+                if (d.showNonRefundableNotice) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, color: AppColors.maroon),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(BookingDetails.nonRefundableNotice),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 const ContactShopButton(outlined: true),
+                // Phase 3: Pending only (see BookingDetails.canCancel).
                 if (d.canCancel) ...[
                   const SizedBox(height: 8),
                   OutlinedButton(
