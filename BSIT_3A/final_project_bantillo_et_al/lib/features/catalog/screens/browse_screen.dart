@@ -446,14 +446,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 ),
               ),
 
-              if (_showFilters)
-                const Card(
-                  margin: EdgeInsets.all(16),
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text('Filter panel opened successfully.'),
-                  ),
-                ),
+              // UI audit #5: show the real filter panel (type, age group,
+              // size, max price, event date). It used to show a leftover
+              // placeholder card, so no filter could be reached.
+              if (_showFilters) _buildFilters(),
 
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
