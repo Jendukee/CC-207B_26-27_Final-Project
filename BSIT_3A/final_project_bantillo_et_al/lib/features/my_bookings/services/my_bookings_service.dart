@@ -12,7 +12,7 @@ import 'package:orange150_rental/shared/models/payment.dart';
 /// Reads and cancels the current customer's bookings.
 class MyBookingsService {
   MyBookingsService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -45,6 +45,21 @@ class MyBookingsService {
         .eq('booking_id', bookingId)
         .order('created_at', ascending: true);
     return rows.map<Payment>(Payment.fromMap).toList();
+  }
+
+  /// When the release (pick-up) and return checklists were saved, for the
+  /// booking timeline (customer redesign). Customers may read their own
+  /// checklists (RLS in 0001). Keys: 'release', 'return'.
+  Future<Map<String, DateTime>> checklistDates(String bookingId) async {
+    final rows = await _client
+        .from('checklists')
+        .select('kind, created_at')
+        .eq('booking_id', bookingId)
+        .order('created_at', ascending: true);
+    return {
+      for (final row in rows)
+        row['kind'] as String: DateTime.parse(row['created_at'] as String),
+    };
   }
 
   /// Cancels a pending or reserved booking (RPC cancel_my_booking).
