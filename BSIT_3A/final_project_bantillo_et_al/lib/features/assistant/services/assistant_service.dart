@@ -1,21 +1,52 @@
-// Talks to the AI assistant through the Supabase Edge Function named in
-// Env.aiFunctionName (default "ai-assistant"). The app NEVER calls Gemini
-// directly and never holds the Gemini key.
-//
-// Edge function contract:
-//   request  { "message": "..." }
-//   success  { "reply": "...", "ai_generated": true }
-//   failure  { "error": "..." }
-//
-// OWNER: Member 1. Every method is a stub that throws UnimplementedError
-// until Member 1 implements it.
+import 'package:orange150_rental/core/config/env.dart';
+import 'package:orange150_rental/core/services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Sends chat messages to the ai-assistant edge function.
 class AssistantService {
   /// Sends [message] and returns the assistant's reply text.
-  /// Show the reply with an AiLabel. Throw a friendly error on timeout.
-  Future<String> sendMessage(String message) => throw UnimplementedError(
-        'TODO(Member 1): invoke the edge function via '
-        'SupabaseService.client.functions.invoke(Env.aiFunctionName, ...)',
+  Future<String> sendMessage(String message) async {
+    final trimmedMessage = message.trim();
+
+    if (trimmedMessage.isEmpty) {
+      throw Exception('Please enter a message.');
+    }
+
+    try {
+      final response = await SupabaseService.client.functions.invoke(
+        Env.aiFunctionName,
+        body: {'message': trimmedMessage},
       );
+
+      final data = response.data;
+
+      if (data is Map && data['reply'] is String) {
+        return (data['reply'] as String).trim();
+      }
+
+      if (data is Map && data['error'] is String) {
+        throw Exception(data['error']);
+      }
+
+      throw Exception('The assistant returned an unexpected response.');
+    } on FunctionException catch (e) {
+      final details = e.details;
+
+      if (details is Map && details['error'] is String) {
+        throw Exception(details['error']);
+      }
+
+      throw Exception(
+        'The assistant is unavailable right now. Please try again.',
+      );
+    } catch (e) {
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+
+      throw Exception(
+        'Unable to connect to the assistant. Please check your internet connection and try again.',
+      );
+    }
+  }
 }
