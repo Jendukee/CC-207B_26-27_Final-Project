@@ -18,6 +18,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/shared/models/item.dart';
@@ -700,7 +701,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         if (!didPop) _confirmDiscard();
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(_isEditing ? 'Edit Item' : 'Add Item')),
+        // Customer redesign 2: shared header with the Orange 150 mark (H4).
+        appBar: BrandAppBar(title: _isEditing ? 'Edit Item' : 'Add Item'),
         // UI audit #28: the shared loading and error (Retry) views.
         body: _isLoading
             ? const LoadingView(message: 'Loading item...')

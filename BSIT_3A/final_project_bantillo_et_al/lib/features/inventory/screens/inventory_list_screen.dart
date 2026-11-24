@@ -16,6 +16,7 @@ import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
@@ -295,8 +296,9 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inventory'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: 'Inventory',
         actions: [
           IconButton(
             tooltip: 'Refresh inventory',
