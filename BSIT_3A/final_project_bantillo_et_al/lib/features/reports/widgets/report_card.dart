@@ -3,13 +3,18 @@
 //
 // Display only: the screen passes in the Future (from the service).
 //
+// Shop-side redesign (Phase 2): the customer side's white card (no shadow,
+// 12 px corners) on the grey page; the total under the title is larger and
+// bold so it reads first, and loading shows a grey chart-sized skeleton
+// instead of a spinner (H1, H4, H8).
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
-import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/skeleton_box.dart';
 import 'package:orange150_rental/features/reports/services/reports_service.dart';
 
 /// One report card.
@@ -56,6 +61,9 @@ class ReportCard<T> extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: FutureBuilder<T>(
@@ -85,12 +93,19 @@ class ReportCard<T> extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       subtitle!(data),
-                      style: theme.textTheme.bodyMedium,
+                      // The total, emphasized (H1).
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 16),
                 if (!done)
-                  const SizedBox(height: 180, child: LoadingView())
+                  Semantics(
+                    label: 'Loading report',
+                    child: const SkeletonBox(height: 180, radius: 12),
+                  )
                 else if (snapshot.hasError)
                   ErrorView(
                     message: snapshot.error is ReportsException
