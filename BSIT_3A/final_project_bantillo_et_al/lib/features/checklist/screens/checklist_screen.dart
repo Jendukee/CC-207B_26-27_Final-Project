@@ -74,6 +74,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   final TextEditingController _damageNotes = TextEditingController();
   final TextEditingController _penalty = TextEditingController(text: '0');
 
+  /// True once the late fee was put in the penalty field (Phase 3).
+  bool _penaltyPrefilled = false;
+
   // Loading the booking.
   ChecklistBooking? _booking;
   List<InclusionLine> _lines = const [];
@@ -134,6 +137,17 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         _lines = lines;
         _ticked.retainAll(lines.map((l) => l.key));
         _loading = false;
+        // Phase 3: pre-fill the late fee ONCE (₱200 per day after the
+        // return date). Staff may still edit it; a reload keeps their edit.
+        if (!_isRelease && !_penaltyPrefilled) {
+          _penaltyPrefilled = true;
+          _penalty.text = ChecklistRules.penaltyText(
+            ChecklistRules.lateFee(
+              returnDate: booking.booking.returnDate,
+              returnedOn: DateTime.now(),
+            ),
+          );
+        }
       });
     } on ChecklistException catch (e) {
       if (!mounted) return;
@@ -510,10 +524,34 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           decoration: const InputDecoration(
             labelText: 'Penalty',
             prefixText: '₱ ',
-            helperText: 'Enter 0 if there is no penalty.',
+            // Phase 3: the field starts with the late fee; staff add any
+            // damage charge or change it.
+            helperText: 'Starts with the late fee. Add any damage charge.',
+            helperMaxLines: 2,
           ),
           validator: ChecklistRules.validatePenalty,
         ),
+        // Phase 3: how the pre-filled late fee was worked out.
+        if (_booking != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.schedule,
+                size: 18,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Late fee: ${ChecklistRules.lateFeeExplanation(returnDate: _booking!.booking.returnDate, returnedOn: DateTime.now())}',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
