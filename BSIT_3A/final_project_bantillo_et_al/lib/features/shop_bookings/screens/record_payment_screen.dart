@@ -20,6 +20,7 @@ import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/shop_bookings/models/booking_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/payment_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/shop_booking.dart';
@@ -171,9 +172,31 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final booking = _booking;
+    final showForm =
+        !_loading &&
+        _loadError == null &&
+        booking != null &&
+        BookingRules.canRecordPayment(booking.booking);
     return Scaffold(
       appBar: AppBar(title: const Text('Record Payment')),
       body: _buildBody(),
+      // Customer redesign: the shared sticky bottom bar keeps Save payment
+      // visible above the keyboard (same widget as the customer checkout).
+      bottomNavigationBar: showForm
+          ? StickyActionBar(
+              action: FilledButton.icon(
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(_submitting ? 'Saving...' : 'Save payment'),
+              ),
+            )
+          : null,
     );
   }
 
@@ -230,20 +253,7 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
                   text: _submitError!,
                 ),
               ],
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _submitting ? null : _submit,
-                icon: _submitting
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: Text(_submitting ? 'Saving...' : 'Save payment'),
-              ),
+              // Save payment is in the sticky bottom bar (see build).
             ],
           ),
         ),
