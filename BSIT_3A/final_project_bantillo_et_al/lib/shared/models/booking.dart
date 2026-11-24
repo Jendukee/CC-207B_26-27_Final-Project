@@ -56,6 +56,7 @@ class Booking {
     this.preferredFittingDate,
     this.notes,
     this.preferredPaymentMethod,
+    this.customerFullName,
   });
 
   /// Builds a booking from a Supabase row.
@@ -88,6 +89,9 @@ class Booking {
       preferredFittingDate: optionalDate('preferred_fitting_date'),
       notes: map['notes'] as String?,
       preferredPaymentMethod: map['preferred_payment_method'] as String?,
+      // Full name given with the booking (migration 0012); null on older
+      // bookings.
+      customerFullName: map['customer_full_name'] as String?,
     );
   }
 
@@ -157,6 +161,10 @@ class Booking {
 
   /// cash / gcash / bank, chosen at checkout (optional).
   final String? preferredPaymentMethod;
+
+  /// Full name the customer gave at checkout (Card 1). The signature is
+  /// checked against this name (migration 0012). Null on older bookings.
+  final String? customerFullName;
 
   /// True when the e-contract was signed with a typed name.
   bool get isSigned => (signedName ?? '').trim().isNotEmpty;
