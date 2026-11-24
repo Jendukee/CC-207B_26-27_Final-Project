@@ -14,6 +14,7 @@ import 'package:orange150_rental/core/router/auth_guard.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/phone_form_field.dart';
 import 'package:orange150_rental/features/auth/services/auth_service.dart';
 
 /// Customer registration form.
@@ -72,9 +73,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       if (result == RegisterResult.needsEmailConfirmation) {
         await _showConfirmEmailDialog();
-        router.goNamed(RouteNames.login, queryParameters: {
-          if (widget.from != null) 'from': widget.from!,
-        });
+        router.goNamed(
+          RouteNames.login,
+          queryParameters: {if (widget.from != null) 'from': widget.from!},
+        );
       } else {
         router.go(AuthGuard.safeFrom(widget.from) ?? RoutePaths.customerHome);
       }
@@ -173,17 +175,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       validator: Validators.email,
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    // UI audit #2: the shared phone field (digits only,
+                    // 11 max, 09XXXXXXXXX) instead of a free text field.
+                    PhoneFormField(
                       controller: _phoneController,
-                      decoration: const InputDecoration(
-                        labelText: 'Mobile number (optional)',
-                        hintText: '09XXXXXXXXX',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                      ),
-                      keyboardType: TextInputType.phone,
-                      autofillHints: const [AutofillHints.telephoneNumber],
-                      textInputAction: TextInputAction.next,
-                      validator: (v) => Validators.phone(v, isRequired: false),
+                      enabled: !_busy,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -196,11 +192,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           tooltip: _obscurePassword
                               ? 'Show password'
                               : 'Hide password',
-                          icon: Icon(_obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                       obscureText: _obscurePassword,
@@ -231,13 +230,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          const Icon(Icons.error_outline,
-                              color: AppColors.deepRed),
+                          const Icon(
+                            Icons.error_outline,
+                            color: AppColors.deepRed,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(_errorMessage!,
-                                style:
-                                    const TextStyle(color: AppColors.deepRed)),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: AppColors.deepRed),
+                            ),
                           ),
                         ],
                       ),
