@@ -5,6 +5,9 @@
 // (Data Privacy Act of 2012 / RA 10173). The consent time is saved to
 // profiles.privacy_consent_at by the handle_new_user() trigger.
 //
+// Customer redesign 2 (Phase 1): BrandAppBar with a back arrow
+// (BackOrHomeButton) and "Continue browsing as guest" (H3, H4).
+//
 // OWNER: team lead.
 
 import 'package:flutter/material.dart';
@@ -14,6 +17,8 @@ import 'package:orange150_rental/core/router/auth_guard.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/back_or_home_button.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/phone_form_field.dart';
 import 'package:orange150_rental/features/auth/services/auth_service.dart';
 
@@ -36,7 +41,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
-  final _authService = AuthService();
+  // Created on first use, so the screen builds in tests without Supabase.
+  late final _authService = AuthService();
 
   bool _consent = false;
   bool _busy = false;
@@ -138,7 +144,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
+      // Customer redesign 2: shared header (H4) with a back arrow that goes
+      // to the previous screen, or to Browse when opened directly (H3).
+      appBar: const BrandAppBar(
+        title: 'Create account',
+        leading: BackOrHomeButton(),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -273,6 +284,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       child: const Text('Already have an account? Sign in'),
+                    ),
+                    // Customer redesign 2: leave without an account (H3).
+                    TextButton(
+                      onPressed: () => context.go(RoutePaths.browse),
+                      child: const Text('Continue browsing as guest'),
                     ),
                   ],
                 ),
