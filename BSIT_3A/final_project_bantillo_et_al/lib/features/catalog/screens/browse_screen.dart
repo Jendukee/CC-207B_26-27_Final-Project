@@ -5,6 +5,9 @@
 //     pinned at the top while scrolling.
 //   * "Recommended For You" (or "Search results") with the item count
 //   * a product grid: 2 columns on phones, 3 from 700 px, 4 from 1000 px
+//   * customer redesign 2: the Orange 150 mark in the header (H4), a heart
+//     on every card and a Favorites heart pinned at the end of the
+//     category tabs (H6, H7)
 //
 // Filter logic (kept from the customer redesign, Phase 1):
 //   * the filter button opens the filter bottom sheet (type, age group,
@@ -26,12 +29,14 @@ import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/features/catalog/models/catalog_rules.dart';
 import 'package:orange150_rental/features/catalog/models/item_filter.dart';
 import 'package:orange150_rental/features/catalog/services/catalog_service.dart';
 import 'package:orange150_rental/features/catalog/widgets/category_row.dart';
+import 'package:orange150_rental/features/catalog/widgets/favorites_shortcut.dart';
 import 'package:orange150_rental/features/catalog/widgets/filter_sheet.dart';
 import 'package:orange150_rental/features/catalog/widgets/product_card.dart';
 import 'package:orange150_rental/features/catalog/widgets/product_grid_skeleton.dart';
@@ -139,13 +144,11 @@ class _BrowseScreenState extends State<BrowseScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
+      // Customer redesign 2: the shared header with the Orange 150 mark (H4).
+      appBar: const BrandAppBar(
+        title: 'Browse',
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: const Text(
-          'Browse',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-        ),
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -171,6 +174,8 @@ class _BrowseScreenState extends State<BrowseScreen> {
                             clearAgeGroup: true,
                           ),
                         ),
+                        // Customer redesign 2: Favorites, pinned at the end.
+                        trailing: const FavoritesShortcut(),
                       ),
                     ],
                   ),

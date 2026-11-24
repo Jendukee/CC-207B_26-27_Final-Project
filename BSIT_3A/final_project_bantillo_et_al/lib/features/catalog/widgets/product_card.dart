@@ -12,6 +12,11 @@
 // card never overflows; the grid cell is sized so the photo keeps the
 // design's 0.71 shape (see productGridDelegate).
 //
+// Favorites (customer redesign 2, Phase 1): a heart on a white circle in
+// the photo's top-right corner. It sits OUTSIDE the card's tap area and
+// screen-reader node, so tapping it never opens the item and it is read as
+// its own toggle button (H6, H7). The badge stops before it.
+//
 // OWNER: Member 1.
 
 import 'package:flutter/material.dart';
@@ -19,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/features/catalog/models/catalog_rules.dart';
+import 'package:orange150_rental/features/catalog/widgets/favorite_button.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 
 /// A grid card for one item.
@@ -29,6 +35,8 @@ class ProductCard extends StatelessWidget {
     required this.item,
     required this.onTap,
     this.tag,
+    this.showFavorite = true,
+    this.undoOnRemove = false,
   });
 
   /// The item shown.
@@ -40,10 +48,16 @@ class ProductCard extends StatelessWidget {
   /// Optional "Available on your date" / "Few dates left" tag.
   final AvailabilityTag? tag;
 
+  /// Shows the favorites heart (on by default).
+  final bool showFavorite;
+
+  /// Undo also after removing (the Favorites screen).
+  final bool undoOnRemove;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Semantics(
+    final card = Semantics(
       button: true,
       label:
           '${item.name}, ${item.type.label}, size ${item.size}, '
@@ -79,7 +93,8 @@ class ProductCard extends StatelessWidget {
                     Positioned(
                       top: 10,
                       left: 10,
-                      right: 10,
+                      // Leaves room for the heart on the right.
+                      right: showFavorite ? 52 : 10,
                       child: Align(
                         alignment: Alignment.topLeft,
                         child: _Badge(tag: tag),
@@ -169,6 +184,22 @@ class ProductCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (!showFavorite) return card;
+    // The heart on top of the photo, as a separate button.
+    return Stack(
+      children: [
+        Positioned.fill(child: card),
+        Positioned(
+          top: 2,
+          right: 2,
+          child: FavoriteButton(
+            itemId: item.id,
+            itemName: item.name,
+            undoOnRemove: undoOnRemove,
+          ),
+        ),
+      ],
     );
   }
 

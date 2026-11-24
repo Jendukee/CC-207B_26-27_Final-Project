@@ -23,7 +23,11 @@ class CategoryRow extends StatelessWidget {
     required this.filter,
     required this.onTap,
     required this.onAll,
+    this.trailing,
   });
+
+  /// A button pinned at the right end, e.g. the Favorites heart.
+  final Widget? trailing;
 
   /// Current filter (decides which tabs look selected).
   final ItemFilter filter;
@@ -37,21 +41,35 @@ class CategoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final noCategory = filter.type == null && filter.ageGroup == null;
+    final tabs = ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      children: [
+        _CategoryTab(label: 'All', selected: noCategory, onTap: onAll),
+        for (final category in BrowseCategory.values)
+          _CategoryTab(
+            label: category.label,
+            selected: category.isSelectedIn(filter),
+            onTap: () => onTap(category),
+          ),
+      ],
+    );
     return SizedBox(
       height: 48,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: [
-          _CategoryTab(label: 'All', selected: noCategory, onTap: onAll),
-          for (final category in BrowseCategory.values)
-            _CategoryTab(
-              label: category.label,
-              selected: category.isSelectedIn(filter),
-              onTap: () => onTap(category),
+      // Customer redesign 2: [trailing] (the Favorites heart) is pinned to
+      // the right, OUTSIDE the scrolling list, so it never scrolls away
+      // (H6 recognition, H7 efficiency).
+      child: trailing == null
+          ? tabs
+          : Row(
+              children: [
+                Expanded(child: tabs),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: trailing,
+                ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
