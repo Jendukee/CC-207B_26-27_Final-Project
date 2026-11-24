@@ -1,20 +1,31 @@
-// The shop's contact details, in ONE place (UI audit, finding #9).
-// Used by the "Contact the shop" button (core/widgets/contact_shop.dart).
-//
-// TODO(team lead): replace the placeholder with the real shop mobile
-// number (11 digits, 09XXXXXXXXX). Until then the dialog says the number
-// is not set and the Call / Copy buttons are disabled.
+// The shop's details, in ONE place, copied exactly from the shop's paper
+// reservation form. Every screen reads them from here: the Contact the shop
+// dialog, the request-submitted screen (GCash number to pay to), payment
+// instructions and the e-contract header.
 //
 // OWNER: team lead. Change only via a reviewed PR.
 
-/// Orange 150 contact information.
+/// Orange 150 contact and payment information.
 abstract final class ShopContact {
-  /// Shop name shown in the dialog.
-  static const String name = 'Orange 150';
+  /// Shop name as printed on the form.
+  static const String name = 'Orange 150 Gowns & Suits Rental';
 
-  /// Shop mobile number, 09XXXXXXXXX. Placeholder until filled in.
-  static const String phone = '09XXXXXXXXX';
+  /// Short name for running text ("Call Orange 150 ...").
+  static const String shortName = 'Orange 150';
 
-  /// True once [phone] is a real 11-digit number starting with 09.
-  static bool get isPhoneSet => RegExp(r'^09\d{9}$').hasMatch(phone);
+  /// Shop address as printed on the form.
+  static const String address =
+      'Blk. 39 Lot 20 Bolilao, Mandurriao (across SM City Iloilo)';
+
+  /// Contact numbers, main number first.
+  static const List<String> phones = ['09157352844', '09544231197'];
+
+  /// Main number (used for the Call button).
+  static const String phone = '09157352844';
+
+  /// GCash number customers send payments to.
+  static const String gcash = '09157352844';
+
+  /// "09157352844 / 09544231197", as printed on the form.
+  static String get phonesText => phones.join(' / ');
 }
