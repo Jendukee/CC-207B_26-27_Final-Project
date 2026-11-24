@@ -1,7 +1,11 @@
-// Horizontal row of category shortcuts with icons (customer redesign,
-// Phase 1): Gowns, Long Gowns, Suits, Bearer, Kids, Adult. Tapping one
-// switches that filter on (or off again). Selected categories get a maroon
-// ring and bold label, so selection is not shown by color alone.
+// Text category tabs under the Browse search bar: All, Gowns, Long Gowns,
+// Suits, Bearer, Kids, Adult. The selected tab is dark with a short
+// underline (selection is shown by weight and the line, not color alone).
+//
+// Logic (unchanged from the customer redesign, Phase 1):
+//   * a category tab switches its filter on, or off again when tapped twice
+//   * type and age categories combine (e.g. Suits + Kids)
+//   * "All" clears both the type and the age-group filter
 //
 // OWNER: Member 1.
 
@@ -11,42 +15,40 @@ import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/features/catalog/models/catalog_rules.dart';
 import 'package:orange150_rental/features/catalog/models/item_filter.dart';
 
-/// The category shortcuts.
+/// The category tabs.
 class CategoryRow extends StatelessWidget {
-  /// Creates the row for the current [filter].
-  const CategoryRow({super.key, required this.filter, required this.onTap});
+  /// Creates the tabs for the current [filter].
+  const CategoryRow({
+    super.key,
+    required this.filter,
+    required this.onTap,
+    required this.onAll,
+  });
 
-  /// Current filter (decides which categories look selected).
+  /// Current filter (decides which tabs look selected).
   final ItemFilter filter;
 
   /// Called with the tapped category.
   final ValueChanged<BrowseCategory> onTap;
 
-  static const Map<BrowseCategory, IconData> _icons = {
-    BrowseCategory.gowns: Icons.checkroom,
-    BrowseCategory.longGowns: Icons.woman,
-    BrowseCategory.suits: Icons.man,
-    BrowseCategory.bearer: Icons.child_care,
-    BrowseCategory.kids: Icons.child_friendly,
-    BrowseCategory.adult: Icons.person_outline,
-  };
+  /// Called when "All" is tapped.
+  final VoidCallback onAll;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final noCategory = filter.type == null && filter.ageGroup == null;
     return SizedBox(
-      height: 96,
+      height: 48,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
+          _CategoryTab(label: 'All', selected: noCategory, onTap: onAll),
           for (final category in BrowseCategory.values)
-            _CategoryButton(
+            _CategoryTab(
               label: category.label,
-              icon: _icons[category]!,
               selected: category.isSelectedIn(filter),
               onTap: () => onTap(category),
-              theme: theme,
             ),
         ],
       ),
@@ -54,59 +56,60 @@ class CategoryRow extends StatelessWidget {
   }
 }
 
-class _CategoryButton extends StatelessWidget {
-  const _CategoryButton({
+/// One text tab with an underline when selected. The tap area is at
+/// least 48 px tall.
+class _CategoryTab extends StatelessWidget {
+  const _CategoryTab({
     required this.label,
-    required this.icon,
     required this.selected,
     required this.onTap,
-    required this.theme,
   });
 
   final String label;
-  final IconData icon;
   final bool selected;
   final VoidCallback onTap;
-  final ThemeData theme;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
       selected: selected,
-      label: '$label category${selected ? ', selected' : ''}',
+      label: '$label${selected ? ', selected' : ''}',
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 76,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.goldTint,
-                  border: Border.all(
-                    color: selected ? AppColors.maroon : Colors.transparent,
-                    width: 2,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    // textSecondary instead of light grey: passes WCAG AA.
+                    color: selected
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    letterSpacing: 0.2,
                   ),
                 ),
-                child: Icon(icon, color: AppColors.maroon),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                const SizedBox(height: 5),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: selected ? 20 : 0,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: AppColors.textPrimary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

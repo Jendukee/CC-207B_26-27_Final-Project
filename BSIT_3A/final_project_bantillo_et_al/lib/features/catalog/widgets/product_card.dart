@@ -1,7 +1,16 @@
-// One product in the Browse grid, like a shopping app listing (customer
-// redesign, Phase 1): square photo, name (2 lines max), price in maroon
-// bold, an optional availability tag and the size. The whole card is one
-// tap target that opens Item details.
+// One product in the Browse grid (Figma design): a tall photo with an
+// availability badge in the top-left corner, then the name (2 lines max),
+// "Type · Size", the price in maroon with "/ rental", and "View details".
+// The whole card is one tap target that opens Item details.
+//
+// Badge text comes from the availability logic (catalog_rules.dart):
+//   "FEW DATES LEFT" (deep red), "AVAILABLE ON YOUR DATE" (green), or
+//   "AVAILABLE" when there is no special tag (Browse only lists rentable
+//   items).
+//
+// Layout safety: the photo takes the height the text does not need, so the
+// card never overflows; the grid cell is sized so the photo keeps the
+// design's 0.71 shape (see productGridDelegate).
 //
 // OWNER: Member 1.
 
@@ -34,71 +43,130 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Photo: takes the space the text below does not need, so the
-            // card never overflows, even with large text settings. The
-            // grid cell is sized so it is about square on phones.
-            Expanded(
-              child: SizedBox(
-                width: double.infinity,
-                child: item.photoUrls.isEmpty
-                    ? _placeholder(theme)
-                    : Image.network(
+    return Semantics(
+      button: true,
+      label:
+          '${item.name}, ${item.type.label}, size ${item.size}, '
+          '${Formatters.peso(item.price)} per rental. View details.',
+      excludeSemantics: true,
+      child: Material(
+        color: theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: theme.colorScheme.outlineVariant, width: 0.8),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Photo with the availability badge.
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (item.photoUrls.isNotEmpty)
+                      Image.network(
                         item.photoUrls.first,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => _placeholder(theme),
+                      )
+                    else
+                      _placeholder(theme),
+                    // left + right limit the badge to the card width, so
+                    // a long label wraps instead of being cut off.
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      right: 10,
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: _Badge(tag: tag),
                       ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    Formatters.peso(item.price),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: AppColors.maroon,
-                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Size ${item.size}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (tag != null) ...[
-                    const SizedBox(height: 6),
-                    _TagChip(tag: tag!),
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+
+              // Details.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.type.label} · ${item.size}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            Formatters.peso(item.price),
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.maroon,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          '/ rental',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.arrow_forward,
+                          size: 14,
+                          color: AppColors.textPrimary,
+                        ),
+                        SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'View details',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -106,34 +174,47 @@ class ProductCard extends StatelessWidget {
 
   Widget _placeholder(ThemeData theme) => ColoredBox(
     color: theme.colorScheme.surfaceContainerHighest,
-    child: const Center(child: Icon(Icons.checkroom, size: 48)),
+    child: Center(
+      child: Icon(
+        Icons.image_outlined,
+        size: 40,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    ),
   );
 }
 
-/// Small outlined tag. "Few dates left" is urgent, so it uses deep red;
-/// "Available on your date" uses the success green. Both have text.
-class _TagChip extends StatelessWidget {
-  const _TagChip({required this.tag});
+/// White badge on the photo. The urgent "Few dates left" uses deep red
+/// text; the others near-black / green. All pass WCAG AA on white.
+class _Badge extends StatelessWidget {
+  const _Badge({this.tag});
 
-  final AvailabilityTag tag;
+  final AvailabilityTag? tag;
 
   @override
   Widget build(BuildContext context) {
-    final color = tag == AvailabilityTag.fewDatesLeft
-        ? AppColors.deepRed
-        : AppColors.success;
+    final (text, color) = switch (tag) {
+      AvailabilityTag.fewDatesLeft => ('FEW DATES LEFT', AppColors.deepRed),
+      AvailabilityTag.availableOnYourDate => (
+        'AVAILABLE ON YOUR DATE',
+        AppColors.success,
+      ),
+      null => ('AVAILABLE', AppColors.textPrimary),
+    };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        border: Border.all(color: color),
-        borderRadius: BorderRadius.circular(4),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
-        tag.label,
+        text,
+        maxLines: 2,
         style: TextStyle(
           color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
         ),
       ),
     );
