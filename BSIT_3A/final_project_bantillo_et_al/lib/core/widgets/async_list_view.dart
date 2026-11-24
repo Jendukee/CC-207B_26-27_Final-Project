@@ -1,6 +1,8 @@
 // Generic list that handles the four async states in one place:
 // loading -> LoadingView, error -> ErrorView (with Retry),
 // empty -> EmptyView, data -> ListView with pull-to-refresh.
+// Shop-side redesign (Phase 2): [loading] replaces the spinner, e.g. with
+// ListSkeleton cards (H1, H4).
 //
 // Example:
 //   AsyncListView<Booking>(
@@ -28,7 +30,11 @@ class AsyncListView<T> extends StatefulWidget {
     this.emptyMessage = 'Nothing here yet.',
     this.errorMessage = 'Something went wrong. Please try again.',
     this.padding = const EdgeInsets.symmetric(vertical: 8),
+    this.loading,
   });
+
+  /// Shown while loading; null shows the LoadingView spinner.
+  final Widget? loading;
 
   /// Fetches the items (usually a method on a feature service).
   final Future<List<T>> Function() load;
@@ -79,7 +85,7 @@ class _AsyncListViewState<T> extends State<AsyncListView<T>> {
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const LoadingView();
+          return widget.loading ?? const LoadingView();
         }
         if (snapshot.hasError) {
           debugPrint('AsyncListView error: ${snapshot.error}');

@@ -12,6 +12,11 @@
 // link with an arrow (e.g. the checkout scrolls to "Sign and submit"), so
 // the reason also leads to the fix (H5, H7, H9).
 //
+// Shop-side redesign (Phase 2): [secondary] adds a row of outlined buttons
+// above the main row (e.g. staff booking details: "Mark picked up" and a
+// red "Cancel booking"), each sharing the width equally; the ONE filled
+// button stays at the bottom (H4, H8).
+//
 // OWNER: team lead. Change only via a reviewed PR.
 
 import 'package:flutter/material.dart';
@@ -25,7 +30,11 @@ class StickyActionBar extends StatelessWidget {
     this.leading,
     this.message,
     this.onMessageTap,
+    this.secondary = const [],
   });
+
+  /// Outlined buttons shown in a row above the main row.
+  final List<Widget> secondary;
 
   /// Makes [message] tappable (e.g. scroll to the field that is missing).
   final VoidCallback? onMessageTap;
@@ -77,6 +86,19 @@ class StickyActionBar extends StatelessWidget {
                   label: Text(message!, textAlign: TextAlign.center),
                 ),
                 const SizedBox(height: 4),
+              ],
+              if (secondary.isNotEmpty) ...[
+                Row(
+                  children: [
+                    for (var i = 0; i < secondary.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      Expanded(
+                        child: SizedBox(height: 48, child: secondary[i]),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 8),
               ],
               Row(
                 children: [

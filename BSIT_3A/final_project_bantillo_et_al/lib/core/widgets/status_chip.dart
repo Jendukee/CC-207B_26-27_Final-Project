@@ -38,13 +38,13 @@ class StatusChip extends StatelessWidget {
 
   /// Standard color for each booking status.
   static Color colorFor(BookingStatus status) => switch (status) {
-        BookingStatus.pending => AppColors.warningOrange,
-        BookingStatus.reserved => AppColors.maroon,
-        BookingStatus.rentedOut => AppColors.deepRed,
-        BookingStatus.returned => AppColors.success,
-        BookingStatus.cancelled => AppColors.neutralGrey,
-        BookingStatus.expired => AppColors.neutralGrey,
-      };
+    BookingStatus.pending => AppColors.warningOrange,
+    BookingStatus.reserved => AppColors.maroon,
+    BookingStatus.rentedOut => AppColors.deepRed,
+    BookingStatus.returned => AppColors.success,
+    BookingStatus.cancelled => AppColors.neutralGrey,
+    BookingStatus.expired => AppColors.neutralGrey,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -65,12 +65,19 @@ class StatusChip extends StatelessWidget {
               Icon(icon, size: 16, color: Colors.white),
               const SizedBox(width: 4),
             ],
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+            // Shop-side redesign: Flexible, so in a narrow place (a grid
+            // card, large text settings) a long label such as "Cleaning /
+            // Repair" wraps to a second line instead of overflowing.
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
