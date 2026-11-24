@@ -1,16 +1,21 @@
-// Browse tab (the customer home), laid out like a shopping app (customer
-// redesign, Phase 1):
-//   * a search bar that stays at the top while scrolling, with a filter
-//     icon (badge = number of active filters)
-//   * a horizontal category row: Gowns, Long Gowns, Suits, Bearer, Kids,
-//     Adult
-//   * a 2-column product grid (more columns on tablets / web)
-//   * a filter bottom sheet (type, age group, size, price, event date)
-//   * skeleton cards while loading, EmptyView / ErrorView with actions
+// Browse tab (the customer home), in the Figma layout:
+//   * maroon "Browse" app bar over a white page
+//   * a search field and a maroon filter button, then text category tabs
+//     (All, Gowns, Long Gowns, Suits, Bearer, Kids, Adult). Both stay
+//     pinned at the top while scrolling.
+//   * "Recommended For You" (or "Search results") with the item count
+//   * a product grid: 2 columns on phones, 3 from 700 px, 4 from 1000 px
 //
-// Product cards show "Available on your date" when the customer filtered
-// by event date, or "Few dates left" when most of the next 30 days are
-// booked (item_busy_days, migration 0010).
+// Filter logic (kept from the customer redesign, Phase 1):
+//   * the filter button opens the filter bottom sheet (type, age group,
+//     size, price range, event date) with Reset / Apply; its badge shows
+//     how many filters are on
+//   * category tabs switch their filter on / off; "All" clears them
+//   * an event date filter shows a banner with a clear button
+//   * cards show "Few dates left" (item_busy_days, migration 0010) or
+//     "Available on your date"
+//   * skeleton cards while loading; ErrorView with Retry; EmptyView with
+//     "Clear filters"; pull to refresh
 //
 // OWNER: Member 1.
 
@@ -59,6 +64,9 @@ class _BrowseScreenState extends State<BrowseScreen> {
   /// Sizes for the filter sheet (loaded once; empty if it fails).
   List<String> _sizes = const [];
 
+  /// Side padding of the page (design: 20 px).
+  static const double _side = 20;
+
   @override
   void initState() {
     super.initState();
@@ -106,6 +114,12 @@ class _BrowseScreenState extends State<BrowseScreen> {
     }
   }
 
+  /// Removes the search text and every filter.
+  void _clearAll() {
+    _search.clear();
+    _apply(const ItemFilter());
+  }
+
   Future<void> _openFilters() async {
     final result = await showFilterSheet(
       context,
@@ -124,25 +138,47 @@ class _BrowseScreenState extends State<BrowseScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      // Light grey page so the white cards stand out.
-      backgroundColor: theme.colorScheme.surfaceContainerLow,
+      backgroundColor: theme.colorScheme.surface,
+      appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text(
+          'Browse',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            _searchBar(theme),
-            SliverToBoxAdapter(
-              child: Container(
-                color: theme.colorScheme.surface,
-                child: CategoryRow(
-                  filter: _filter,
-                  onTap: (category) => _apply(category.toggleIn(_filter)),
+            // Search + filter button + category tabs, pinned.
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _PinnedHeader(
+                height: _PinnedHeader.extent,
+                child: ColoredBox(
+                  color: theme.colorScheme.surface,
+                  child: Column(
+                    children: [
+                      _searchRow(theme),
+                      CategoryRow(
+                        filter: _filter,
+                        onTap: (category) => _apply(category.toggleIn(_filter)),
+                        onAll: () => _apply(
+                          _filter.copyWith(
+                            clearType: true,
+                            clearAgeGroup: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
             if (_filter.eventDate != null)
-              SliverToBoxAdapter(child: _dateBanner(theme)),
+              SliverToBoxAdapter(child: _dateBanner()),
             ..._results(),
           ],
         ),
@@ -150,65 +186,108 @@ class _BrowseScreenState extends State<BrowseScreen> {
     );
   }
 
-  /// Search field in a maroon bar that stays at the top (pinned).
-  Widget _searchBar(ThemeData theme) {
+  /// Search field and the maroon filter button (opens the filter sheet).
+  Widget _searchRow(ThemeData theme) {
     final active = _filter.activeCount;
-    return SliverAppBar(
-      pinned: true,
-      toolbarHeight: 68,
-      titleSpacing: 12,
-      title: TextField(
-        controller: _search,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (text) => _apply(_filter.copyWith(query: text.trim())),
-        style: const TextStyle(color: AppColors.textPrimary),
-        decoration: InputDecoration(
-          hintText: 'Search gowns, suits, barong…',
-          filled: true,
-          fillColor: theme.colorScheme.surface,
-          isDense: true,
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _search,
-            builder: (context, value, _) => value.text.isEmpty
-                ? const SizedBox.shrink()
-                : IconButton(
-                    tooltip: 'Clear search',
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _search.clear();
-                      _apply(_filter.copyWith(query: ''));
-                    },
+    final border = theme.colorScheme.outlineVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(_side, 18, _side, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 48,
+              child: TextField(
+                controller: _search,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (text) =>
+                    _apply(_filter.copyWith(query: text.trim())),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search items...',
+                  hintStyle: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
                   ),
+                  filled: true,
+                  fillColor: theme.colorScheme.surface,
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    size: 20,
+                    color: AppColors.textSecondary,
+                  ),
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _search,
+                    builder: (context, value, _) => value.text.isEmpty
+                        ? const SizedBox.shrink()
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () {
+                              _search.clear();
+                              _apply(_filter.copyWith(query: ''));
+                            },
+                          ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.maroon),
+                  ),
+                ),
+              ),
+            ),
           ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(24),
-            borderSide: BorderSide.none,
+          const SizedBox(width: 10),
+          // Filter button with the number of active filters.
+          Tooltip(
+            message: active == 0 ? 'Filters' : 'Filters ($active on)',
+            child: Material(
+              color: AppColors.maroon,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: _openFilters,
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox.square(
+                  dimension: 48,
+                  child: Center(
+                    child: Badge(
+                      isLabelVisible: active > 0,
+                      label: Text('$active'),
+                      backgroundColor: AppColors.gold,
+                      textColor: AppColors.textPrimary,
+                      child: const Icon(
+                        Icons.tune,
+                        color: AppColors.onMaroon,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
-      actions: [
-        IconButton(
-          tooltip: active == 0 ? 'Filters' : 'Filters ($active on)',
-          onPressed: _openFilters,
-          icon: Badge(
-            isLabelVisible: active > 0,
-            label: Text('$active'),
-            backgroundColor: AppColors.gold,
-            textColor: AppColors.textPrimary,
-            child: const Icon(Icons.tune),
-          ),
-        ),
-        const SizedBox(width: 4),
-      ],
     );
   }
 
   /// "Showing items free on Dec 24, 2026" with a clear button.
-  Widget _dateBanner(ThemeData theme) {
+  Widget _dateBanner() {
     return Container(
-      color: AppColors.goldTint,
-      padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+      margin: const EdgeInsets.fromLTRB(_side, 4, _side, 0),
+      padding: const EdgeInsets.only(left: 12),
+      decoration: BoxDecoration(
+        color: AppColors.goldTint,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Row(
         children: [
           const Icon(Icons.event_available, size: 20),
@@ -228,70 +307,139 @@ class _BrowseScreenState extends State<BrowseScreen> {
     );
   }
 
-  /// Skeleton, error, empty or the grid, as slivers.
+  /// "Recommended For You" / "Search results" and the item count.
+  Widget _sectionHeader(int? count) {
+    final searching = _filter.activeCount > 0 || _filter.query.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(_side, 20, _side, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(
+                searching ? 'Search results' : 'Recommended For You',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          if (count != null)
+            Text(
+              '$count ${count == 1 ? 'item' : 'items'}',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Section header plus skeleton, error, empty or the grid, as slivers.
   List<Widget> _results() {
     return [
       FutureBuilder<_BrowseData>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const SliverPadding(
-              padding: EdgeInsets.all(8),
-              sliver: ProductGridSkeleton(),
-            );
-          }
-          if (snapshot.hasError) {
-            return SliverFillRemaining(
-              hasScrollBody: false,
-              child: ErrorView(
-                message: friendlyErrorMessage(
-                  snapshot.error!,
-                  fallback: 'Could not load items. Please try again.',
-                ),
-                onRetry: _refresh,
-              ),
-            );
-          }
-          final data = snapshot.requireData;
-          if (data.items.isEmpty) {
-            final filtered = _filter.activeCount > 0 || _filter.query != '';
-            return SliverFillRemaining(
-              hasScrollBody: false,
-              child: EmptyView(
-                icon: Icons.search_off,
-                message: filtered
-                    ? 'No items match your search. Try other filters.'
-                    : 'No gowns or suits are available right now.',
-                actionLabel: filtered ? 'Clear filters' : null,
-                onAction: filtered
-                    ? () {
-                        _search.clear();
-                        _apply(const ItemFilter());
-                      }
-                    : null,
-              ),
-            );
-          }
-          return SliverPadding(
-            padding: const EdgeInsets.all(8),
-            sliver: SliverGrid.builder(
-              gridDelegate: productGridDelegate,
-              itemCount: data.items.length,
-              itemBuilder: (context, index) {
-                final item = data.items[index];
-                return ProductCard(
-                  item: item,
-                  onTap: () => _openItem(item),
-                  tag: AvailabilityRules.tagFor(
-                    searchedByDate: _filter.eventDate != null,
-                    busyDays: data.busyDays[item.id] ?? 0,
-                  ),
-                );
-              },
-            ),
+          final loading = snapshot.connectionState != ConnectionState.done;
+          final count = loading || snapshot.hasError
+              ? null
+              : snapshot.requireData.items.length;
+          return SliverMainAxisGroup(
+            slivers: [
+              SliverToBoxAdapter(child: _sectionHeader(count)),
+              _resultBody(snapshot, loading),
+            ],
           );
         },
       ),
     ];
   }
+
+  Widget _resultBody(AsyncSnapshot<_BrowseData> snapshot, bool loading) {
+    if (loading) {
+      return const SliverPadding(
+        padding: EdgeInsets.fromLTRB(_side, 0, _side, 24),
+        sliver: ProductGridSkeleton(),
+      );
+    }
+    if (snapshot.hasError) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: ErrorView(
+          message: friendlyErrorMessage(
+            snapshot.error!,
+            fallback: 'Unable to load items. Please try again.',
+          ),
+          onRetry: _refresh,
+        ),
+      );
+    }
+    final data = snapshot.requireData;
+    if (data.items.isEmpty) {
+      final filtered = _filter.activeCount > 0 || _filter.query.isNotEmpty;
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: EmptyView(
+          icon: Icons.search_off,
+          message: filtered
+              ? 'No items found. Try changing or clearing your search and '
+                    'filters.'
+              : 'No gowns or suits are available right now.',
+          actionLabel: filtered ? 'Clear filters' : null,
+          onAction: filtered ? _clearAll : null,
+        ),
+      );
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(_side, 0, _side, 24),
+      // SliverLayoutBuilder gives the grid width for the column count.
+      sliver: SliverLayoutBuilder(
+        builder: (context, constraints) => SliverGrid.builder(
+          gridDelegate: productGridDelegate(constraints.crossAxisExtent),
+          itemCount: data.items.length,
+          itemBuilder: (context, index) {
+            final item = data.items[index];
+            return ProductCard(
+              item: item,
+              onTap: () => _openItem(item),
+              tag: AvailabilityRules.tagFor(
+                searchedByDate: _filter.eventDate != null,
+                busyDays: data.busyDays[item.id] ?? 0,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Keeps the search row and category tabs visible at the top.
+class _PinnedHeader extends SliverPersistentHeaderDelegate {
+  _PinnedHeader({required this.height, required this.child});
+
+  /// Search row (18 + 48 + 12) + category tabs (48).
+  static const double extent = 126;
+
+  final double height;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
+      SizedBox(height: height, child: child);
+
+  @override
+  bool shouldRebuild(_PinnedHeader oldDelegate) => true;
 }
