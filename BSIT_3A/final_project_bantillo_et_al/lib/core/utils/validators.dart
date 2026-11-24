@@ -41,6 +41,33 @@ abstract final class Validators {
     LengthLimitingTextInputFormatter(11),
   ];
 
+  /// Input formatters for money fields (price, payment, penalty), UI audit
+  /// #16: digits and one decimal point with at most 2 decimals, e.g.
+  /// "1500" or "1500.50". Letters, commas and a second dot cannot be typed.
+  static final List<TextInputFormatter> moneyFormatters = [decimalFormatter()];
+
+  /// Input formatters for body measurements in inches (UI audit #24):
+  /// up to 3 digits and 2 decimals, e.g. "32.5".
+  static final List<TextInputFormatter> measurementFormatters = [
+    decimalFormatter(maxWholeDigits: 3),
+  ];
+
+  /// A formatter that only accepts a decimal number with at most
+  /// [maxWholeDigits] digits before the point and [maxDecimals] after it.
+  /// If a key press (or paste) would break the rule, the old text is kept.
+  static TextInputFormatter decimalFormatter({
+    int maxWholeDigits = 9,
+    int maxDecimals = 2,
+  }) {
+    final pattern = RegExp(
+      '^\\d{0,$maxWholeDigits}(\\.\\d{0,$maxDecimals})?\$',
+    );
+    return TextInputFormatter.withFunction(
+      (oldValue, newValue) =>
+          pattern.hasMatch(newValue.text) ? newValue : oldValue,
+    );
+  }
+
   /// Fails when the value is null or only whitespace.
   static String? required(String? value, {String fieldName = 'This field'}) {
     if (value == null || value.trim().isEmpty) return '$fieldName is required.';
