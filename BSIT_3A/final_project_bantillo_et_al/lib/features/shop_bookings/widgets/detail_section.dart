@@ -5,6 +5,8 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:orange150_rental/core/widgets/section_card.dart';
+
 /// A card with a title and some content, used for each details section.
 class DetailSection extends StatelessWidget {
   /// Creates a section titled [title].
@@ -24,34 +26,17 @@ class DetailSection extends StatelessWidget {
   /// Section content.
   final List<Widget> children;
 
+  /// Customer redesign: drawn by the shared core SectionCard, so staff
+  /// and customer screens use the same card style.
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
+    return SectionCard(
+      title: title,
+      icon: icon,
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 20, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(title, style: theme.textTheme.titleMedium),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...children,
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
       ),
     );
   }
