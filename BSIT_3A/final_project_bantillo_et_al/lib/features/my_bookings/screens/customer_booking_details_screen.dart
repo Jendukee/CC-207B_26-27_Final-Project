@@ -304,6 +304,7 @@ class _CustomerBookingDetailsScreenState
                           signedName: b.signedName ?? '',
                           signedAt: b.termsAcknowledgedAt,
                           version: b.termsVersion,
+                          customerFullName: b.customerFullName,
                         ),
                   child: Text(
                     b.termsSnapshot == null
