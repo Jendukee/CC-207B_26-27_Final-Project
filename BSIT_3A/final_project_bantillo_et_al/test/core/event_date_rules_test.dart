@@ -1,10 +1,10 @@
 // Unit tests for EventDateRules (UI audit #13): which event dates are
 // free and which alternatives are suggested.
-// Run with: flutter test test/features/reservation
+// Run with: flutter test test/core
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:orange150_rental/features/reservation/models/event_date_rules.dart';
+import 'package:orange150_rental/core/utils/event_date_rules.dart';
 
 void main() {
   // Another booking holds Dec 23-25 (pick-up, event, return).

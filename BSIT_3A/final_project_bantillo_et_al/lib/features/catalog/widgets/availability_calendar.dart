@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import 'package:orange150_rental/core/theme/app_colors.dart';
-import 'package:orange150_rental/features/reservation/models/event_date_rules.dart';
+import 'package:orange150_rental/core/utils/event_date_rules.dart';
 
 /// An availability month view.
 class AvailabilityCalendar extends StatefulWidget {
