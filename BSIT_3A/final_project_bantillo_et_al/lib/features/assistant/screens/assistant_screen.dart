@@ -1,13 +1,3 @@
-// AI style assistant chat (Gemini through the ai-assistant edge function).
-// The banner at the top marks replies as AI-generated and always shows a
-// "Contact the shop" button (UI audit #9).
-//
-// UI audit changes: brand colors (maroon / gold tint) instead of orange, so
-// white text on the user's bubbles passes WCAG AA (#19), and every reply
-// from the AI carries the shared "AI-generated" label (#20).
-//
-// OWNER: Member 1.
-
 import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/theme/app_colors.dart';
@@ -84,13 +74,18 @@ class _AssistantScreenState extends State<AssistantScreen> {
     });
   }
 
-  Future<void> _sendMessage([String? suggestedMessage]) async {
+  Future<void> _sendMessage({
+    String? suggestedMessage,
+    bool retry = false,
+  }) async {
     final message = (suggestedMessage ?? _controller.text).trim();
 
     if (message.isEmpty || _isLoading) return;
 
     setState(() {
-      _messages.add(_ChatMessage(text: message, isUser: true));
+      if (!retry) {
+        _messages.add(_ChatMessage(text: message, isUser: true));
+      }
       _controller.clear();
       _isLoading = true;
       _failedMessage = null;
@@ -107,17 +102,17 @@ class _AssistantScreenState extends State<AssistantScreen> {
         _messages.add(_ChatMessage(text: reply, isUser: false, isAi: true));
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
         _failedMessage = message;
         _messages.add(
-          const _ChatMessage(
-            text:
-                "I couldn't connect right now. Please try sending "
-                "your message again.",
+          _ChatMessage(
+            text: error is AssistantException
+                ? error.message
+                : "I couldn't connect right now. Please try again.",
             isUser: false,
             isError: true,
           ),
@@ -133,11 +128,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
     if (message == null || _isLoading) return;
 
     setState(() {
-      _messages.removeWhere((m) => m.isError);
+      final errorIndex = _messages.lastIndexWhere((message) => message.isError);
+      if (errorIndex >= 0) _messages.removeAt(errorIndex);
       _failedMessage = null;
     });
 
-    _sendMessage(message);
+    _sendMessage(suggestedMessage: message, retry: true);
   }
 
   @override
@@ -145,16 +141,40 @@ class _AssistantScreenState extends State<AssistantScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      // Customer redesign 2: the shared header with the Orange 150 mark
-      // (H4). It replaces the sparkle avatar and the "Orange 150" subtitle,
-      // which the mark now shows (H8). The title still matches the tab
-      // label (UI audit #38); the AI banner below says it is AI.
-      appBar: const BrandAppBar(title: 'Assistant'),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.orange.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.auto_awesome,
+                color: Colors.deepOrange.shade700,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Style Assistant'),
+                Text(
+                  'Orange 150',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Container(
             width: double.infinity,
-            color: AppColors.goldTint,
+            color: Colors.orange.shade50,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
@@ -210,8 +230,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 children: _suggestions.map((suggestion) {
                   return ActionChip(
                     label: Text(suggestion),
-                    backgroundColor: AppColors.goldTint,
-                    onPressed: () => _sendMessage(suggestion),
+                    backgroundColor: Colors.orange.shade50,
+                    onPressed: () => _sendMessage(suggestedMessage: suggestion),
                   );
                 }).toList(),
               ),
@@ -233,7 +253,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isUser ? AppColors.maroon : Colors.grey.shade100,
+          color: isUser ? Colors.deepOrange.shade600 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(18).copyWith(
             bottomRight: isUser ? const Radius.circular(4) : null,
             bottomLeft: !isUser ? const Radius.circular(4) : null,

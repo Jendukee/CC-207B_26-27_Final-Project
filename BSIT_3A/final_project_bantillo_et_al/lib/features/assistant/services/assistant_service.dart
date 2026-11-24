@@ -8,50 +8,75 @@ import 'package:orange150_rental/core/config/env.dart';
 import 'package:orange150_rental/core/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// A safe, user-facing assistant request error.
+class AssistantException implements Exception {
+  const AssistantException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// Sends chat messages to the ai-assistant edge function.
 class AssistantService {
   /// Sends [message] and returns the assistant's reply text.
   Future<String> sendMessage(String message) async {
     final trimmedMessage = message.trim();
-
     if (trimmedMessage.isEmpty) {
-      throw Exception('Please enter a message.');
+      throw const AssistantException('Please enter a message.');
+    }
+
+    final functionName = Env.aiFunctionName.trim().toLowerCase();
+    if (functionName.isEmpty) {
+      throw const AssistantException(
+        'The assistant is not configured. Check AI_FUNCTION_NAME in env.json.',
+      );
     }
 
     try {
       final response = await SupabaseService.client.functions.invoke(
-        Env.aiFunctionName,
+        functionName,
         body: {'message': trimmedMessage},
       );
-
       final data = response.data;
 
       if (data is Map && data['reply'] is String) {
-        return (data['reply'] as String).trim();
+        final reply = (data['reply'] as String).trim();
+        if (reply.isNotEmpty) return reply;
       }
 
       if (data is Map && data['error'] is String) {
-        throw Exception(data['error']);
+        throw AssistantException(data['error'] as String);
       }
 
-      throw Exception('The assistant returned an unexpected response.');
-    } on FunctionException catch (e) {
-      final details = e.details;
-
-      if (details is Map && details['error'] is String) {
-        throw Exception(details['error']);
-      }
-
-      throw Exception(
-        'The assistant is unavailable right now. Please try again.',
+      throw const AssistantException(
+        'The assistant returned an empty or unexpected response.',
       );
-    } catch (e) {
-      if (e.toString().contains('Exception:')) {
-        rethrow;
+    } on AssistantException {
+      rethrow;
+    } on FunctionException catch (error) {
+      final details = error.details;
+      if (details is Map && details['error'] is String) {
+        throw AssistantException(details['error'] as String);
       }
-
-      throw Exception(
-        'Unable to connect to the assistant. Please check your internet connection and try again.',
+      if (error.status == 404) {
+        throw const AssistantException(
+          'The assistant function was not found. Check its name and deploy it.',
+        );
+      }
+      if (error.status == 401 || error.status == 403) {
+        throw const AssistantException(
+          'The assistant request was not authorized. Check the Supabase '
+          'function deployment and project configuration.',
+        );
+      }
+      throw const AssistantException(
+        'The assistant is temporarily unavailable. Please try again.',
+      );
+    } catch (_) {
+      throw const AssistantException(
+        'Could not reach the assistant. Check your connection and try again.',
       );
     }
   }
