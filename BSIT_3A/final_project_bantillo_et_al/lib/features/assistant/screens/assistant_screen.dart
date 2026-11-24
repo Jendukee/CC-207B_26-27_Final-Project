@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:orange150_rental/features/assistant/services/assistant_service.dart';
 
@@ -65,13 +64,18 @@ class _AssistantScreenState extends State<AssistantScreen> {
     });
   }
 
-  Future<void> _sendMessage([String? suggestedMessage]) async {
+  Future<void> _sendMessage({
+    String? suggestedMessage,
+    bool retry = false,
+  }) async {
     final message = (suggestedMessage ?? _controller.text).trim();
 
     if (message.isEmpty || _isLoading) return;
 
     setState(() {
-      _messages.add(_ChatMessage(text: message, isUser: true));
+      if (!retry) {
+        _messages.add(_ChatMessage(text: message, isUser: true));
+      }
       _controller.clear();
       _isLoading = true;
       _failedMessage = null;
@@ -88,17 +92,17 @@ class _AssistantScreenState extends State<AssistantScreen> {
         _messages.add(_ChatMessage(text: reply, isUser: false));
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
         _failedMessage = message;
         _messages.add(
-          const _ChatMessage(
-            text:
-                "I couldn't connect right now. Please try sending "
-                "your message again.",
+          _ChatMessage(
+            text: error is AssistantException
+                ? error.message
+                : "I couldn't connect right now. Please try again.",
             isUser: false,
             isError: true,
           ),
@@ -114,11 +118,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
     if (message == null || _isLoading) return;
 
     setState(() {
-      _messages.removeWhere((m) => m.isError);
+      final errorIndex = _messages.lastIndexWhere((message) => message.isError);
+      if (errorIndex >= 0) _messages.removeAt(errorIndex);
       _failedMessage = null;
     });
 
-    _sendMessage(message);
+    _sendMessage(suggestedMessage: message, retry: true);
   }
 
   @override
@@ -148,10 +153,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 Text('Style Assistant'),
                 Text(
                   'Orange 150',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.normal,
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
                 ),
               ],
             ),
@@ -163,10 +165,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
           Container(
             width: double.infinity,
             color: Colors.orange.shade50,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 10,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
                 Icon(
@@ -223,7 +222,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   return ActionChip(
                     label: Text(suggestion),
                     backgroundColor: Colors.orange.shade50,
-                    onPressed: () => _sendMessage(suggestion),
+                    onPressed: () => _sendMessage(suggestedMessage: suggestion),
                   );
                 }).toList(),
               ),
@@ -239,27 +238,16 @@ class _AssistantScreenState extends State<AssistantScreen> {
     final isUser = message.isUser;
 
     return Align(
-      alignment: isUser
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 320),
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isUser
-              ? Colors.deepOrange.shade600
-              : Colors.grey.shade100,
+          color: isUser ? Colors.deepOrange.shade600 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(18).copyWith(
-            bottomRight: isUser
-                ? const Radius.circular(4)
-                : null,
-            bottomLeft: !isUser
-                ? const Radius.circular(4)
-                : null,
+            bottomRight: isUser ? const Radius.circular(4) : null,
+            bottomLeft: !isUser ? const Radius.circular(4) : null,
           ),
         ),
         child: Column(
@@ -333,9 +321,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          border: Border(
-            top: BorderSide(color: Colors.grey.shade200),
-          ),
+          border: Border(top: BorderSide(color: Colors.grey.shade200)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
