@@ -76,11 +76,20 @@ class Payment {
   /// When it was recorded.
   final DateTime? createdAt;
 
+  /// [method] in words for customers and staff (UI audit #15), e.g.
+  /// "gcash" -> "GCash". Unknown values are shown as they are.
+  String get methodLabel => switch (method) {
+    'cash' => 'Cash',
+    'gcash' => 'GCash',
+    'bank' => 'Bank transfer',
+    _ => method,
+  };
+
   /// Row for insert. `recorded_by` defaults to auth.uid() in the database.
   Map<String, dynamic> toInsertMap() => {
-        'booking_id': bookingId,
-        'amount': amount,
-        'kind': kind.dbValue,
-        'method': method,
-      };
+    'booking_id': bookingId,
+    'amount': amount,
+    'kind': kind.dbValue,
+    'method': method,
+  };
 }
