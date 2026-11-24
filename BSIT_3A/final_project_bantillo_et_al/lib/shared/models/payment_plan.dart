@@ -6,7 +6,11 @@
 //                         centavo, same as the database), balance at pick-up
 //   Full payment        : pay now = the total, balance 0
 //
-// OWNER: Member 2.
+// Moved from features/reservation/models to shared/models so checkout,
+// Request submitted and my_bookings use it without importing another
+// feature's files.
+//
+// OWNER: team lead (shared). Change only via a reviewed PR.
 
 import 'package:orange150_rental/shared/models/booking.dart';
 

@@ -9,9 +9,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:orange150_rental/features/reservation/models/agreement_form.dart';
-import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
+import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 Map<String, dynamic> _params({
   required String fullName,

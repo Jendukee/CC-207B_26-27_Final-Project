@@ -21,9 +21,9 @@ import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/payment_instructions.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
-import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
+import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 /// The Request submitted screen.
 class BookingConfirmationScreen extends StatefulWidget {

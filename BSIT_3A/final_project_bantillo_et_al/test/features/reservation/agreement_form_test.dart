@@ -8,9 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orange150_rental/core/config/rental_terms.dart';
 import 'package:orange150_rental/core/config/shop_contact.dart';
 import 'package:orange150_rental/features/reservation/models/agreement_form.dart';
-import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/item.dart';
+import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 AgreementForm _form({List<String> inclusions = const ['Petticoat']}) =>
     AgreementForm(
