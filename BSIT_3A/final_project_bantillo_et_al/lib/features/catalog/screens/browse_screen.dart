@@ -1,7 +1,18 @@
+// Browse tab: search the catalog and filter by type, age group, size,
+// maximum price and event date.
+//
+// UI audit changes: the filter panel is shown (#5), type and age group use
+// chips (#21), the price field accepts numbers only (#16), and dates and
+// pesos use the shared Formatters (#23).
+//
+// OWNER: Member 1.
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/features/catalog/models/item_filter.dart';
 import 'package:orange150_rental/features/catalog/services/catalog_service.dart';
 import 'package:orange150_rental/shared/models/item.dart';
@@ -123,11 +134,39 @@ class _BrowseScreenState extends State<BrowseScreen> {
     _loadItems();
   }
 
-  String _formatDate(DateTime date) {
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-
-    return '${date.year}-$month-$day';
+  /// A labelled row of ChoiceChips: "All" plus one chip per option.
+  /// Picking "All" passes null to [onSelected].
+  Widget _choiceRow<T>({
+    required String label,
+    required String allLabel,
+    required List<T> options,
+    required String Function(T option) optionLabel,
+    required T? selected,
+    required ValueChanged<T?> onSelected,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          children: [
+            ChoiceChip(
+              label: Text(allLabel),
+              selected: selected == null,
+              onSelected: (_) => onSelected(null),
+            ),
+            for (final option in options)
+              ChoiceChip(
+                label: Text(optionLabel(option)),
+                selected: selected == option,
+                onSelected: (_) => onSelected(option),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildFilters() {
@@ -144,49 +183,26 @@ class _BrowseScreenState extends State<BrowseScreen> {
             ),
             const SizedBox(height: 12),
 
-            DropdownButtonFormField<ItemType>(
-              initialValue: _selectedType,
-              hint: const Text('All types'),
-              decoration: const InputDecoration(
-                labelText: 'Item type',
-                border: OutlineInputBorder(),
-              ),
-              items: ItemType.values
-                  .map(
-                    (type) => DropdownMenuItem<ItemType>(
-                      value: type,
-                      child: Text(type.label),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedType = value;
-                });
-              },
+            // UI audit #21: 2-option filters are single-choice chips
+            // (All / Gown / Suit) instead of dropdowns, so every choice is
+            // visible and one tap away.
+            _choiceRow<ItemType>(
+              label: 'Item type',
+              allLabel: 'All types',
+              options: ItemType.values,
+              optionLabel: (type) => type.label,
+              selected: _selectedType,
+              onSelected: (type) => setState(() => _selectedType = type),
             ),
             const SizedBox(height: 12),
 
-            DropdownButtonFormField<AgeGroup>(
-              initialValue: _selectedAgeGroup,
-              hint: const Text('All age groups'),
-              decoration: const InputDecoration(
-                labelText: 'Age group',
-                border: OutlineInputBorder(),
-              ),
-              items: AgeGroup.values
-                  .map(
-                    (group) => DropdownMenuItem<AgeGroup>(
-                      value: group,
-                      child: Text(group.label),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedAgeGroup = value;
-                });
-              },
+            _choiceRow<AgeGroup>(
+              label: 'Age group',
+              allLabel: 'All ages',
+              options: AgeGroup.values,
+              optionLabel: (group) => group.label,
+              selected: _selectedAgeGroup,
+              onSelected: (group) => setState(() => _selectedAgeGroup = group),
             ),
 
             const SizedBox(height: 12),
@@ -204,6 +220,8 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
             TextField(
               controller: _priceController,
+              // UI audit #16: digits and one decimal point only.
+              inputFormatters: Validators.moneyFormatters,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -223,7 +241,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
               label: Text(
                 _selectedEventDate == null
                     ? 'Select event date'
-                    : 'Event date: ${_formatDate(_selectedEventDate!)}',
+                    : 'Event date: ${Formatters.date(_selectedEventDate!)}',
               ),
             ),
 
@@ -314,7 +332,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                   const SizedBox(height: 8),
 
                   Text(
-                    '₱${item.price.toStringAsFixed(2)}',
+                    Formatters.peso(item.price), // "₱3,500.00" (#23)
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 17,

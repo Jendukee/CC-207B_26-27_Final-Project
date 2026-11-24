@@ -1,8 +1,13 @@
+// Item details: photos, price, size, condition, description, inclusions
+// and the Reserve button.
+//
+// OWNER: Member 1.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/features/catalog/services/catalog_service.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 
@@ -36,83 +41,77 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   }
 
   @override
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Item Details')),
+      body: FutureBuilder<Item>(
+        future: _itemFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text('Item Details'),
-    ),
-    body: FutureBuilder<Item>(
-      future: _itemFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
-
-        if (snapshot.hasError || !snapshot.hasData) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48),
-                  const SizedBox(height: 12),
-                  const Text('Unable to load item details.'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _retryLoading,
-                    child: const Text('Try Again'),
-                  ),
-                ],
+          if (snapshot.hasError || !snapshot.hasData) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48),
+                    const SizedBox(height: 12),
+                    const Text('Unable to load item details.'),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _retryLoading,
+                      child: const Text('Try Again'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }
+            );
+          }
 
-        return _buildItemDetails(snapshot.data!);
-      },
-    ),
-    bottomNavigationBar: FutureBuilder<Item>(
-      future: _itemFuture,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.hasError) {
-          return const SizedBox.shrink();
-        }
+          return _buildItemDetails(snapshot.data!);
+        },
+      ),
+      bottomNavigationBar: FutureBuilder<Item>(
+        future: _itemFuture,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData || snapshot.hasError) {
+            return const SizedBox.shrink();
+          }
 
-        final item = snapshot.data!;
+          final item = snapshot.data!;
 
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: () {
-                  context.pushNamed(
-                    RouteNames.reserveDates,
-                    pathParameters: {'itemId': item.id},
-                  );
-                },
-                child: const Text(
-                  'Reserve This Item',
-                  style: TextStyle(fontSize: 16),
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () {
+                    context.pushNamed(
+                      RouteNames.reserveDates,
+                      pathParameters: {'itemId': item.id},
+                    );
+                  },
+                  child: const Text(
+                    'Reserve This Item',
+                    style: TextStyle(fontSize: 16),
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
-    ),
-  );
-}
+          );
+        },
+      ),
+    );
+  }
 
-Widget _buildItemDetails(Item item) {
-
+  Widget _buildItemDetails(Item item) {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,21 +132,23 @@ Widget _buildItemDetails(Item item) {
                 const SizedBox(height: 8),
                 Text(
                   '${item.type.label} • ${item.ageGroup.label}',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
                 ),
                 const SizedBox(height: 20),
 
                 // Rental price
-                const Text(
+                // UI audit #19: theme secondary text color (passes WCAG AA)
+                // instead of Colors.grey (about 2.7:1 on white).
+                Text(
                   'Rental Price',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '₱${item.price.toStringAsFixed(2)}',
+                  Formatters.peso(item.price), // "₱3,500.00" (#23)
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -159,13 +160,13 @@ Widget _buildItemDetails(Item item) {
                 // Item information
                 const Text(
                   'Item Information',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                _buildInfoRow('Size', item.size.isEmpty ? 'Not specified' : item.size),
+                _buildInfoRow(
+                  'Size',
+                  item.size.isEmpty ? 'Not specified' : item.size,
+                ),
                 _buildInfoRow('Type', item.type.label),
                 _buildInfoRow('Age Group', item.ageGroup.label),
                 _buildInfoRow('Condition', item.condition.label),
@@ -175,10 +176,7 @@ Widget _buildItemDetails(Item item) {
                 // Description
                 const Text(
                   'Description',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -193,10 +191,7 @@ Widget _buildItemDetails(Item item) {
                 // Inclusions
                 const Text(
                   'What\'s Included',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 if (item.inclusions.isEmpty)
@@ -272,10 +267,7 @@ Widget _buildItemDetails(Item item) {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(color: Colors.grey.shade700),
-          ),
+          Text(label, style: TextStyle(color: Colors.grey.shade700)),
           Flexible(
             child: Text(
               value,
