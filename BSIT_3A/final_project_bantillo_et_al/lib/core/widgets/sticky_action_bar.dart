@@ -8,6 +8,10 @@
 // main button and takes the remaining width. [message] is an optional line
 // above both, e.g. why the main button is disabled.
 //
+// Customer redesign 2: with [onMessageTap] the message becomes a 48 px
+// link with an arrow (e.g. the checkout scrolls to "Sign and submit"), so
+// the reason also leads to the fix (H5, H7, H9).
+//
 // OWNER: team lead. Change only via a reviewed PR.
 
 import 'package:flutter/material.dart';
@@ -20,7 +24,11 @@ class StickyActionBar extends StatelessWidget {
     required this.action,
     this.leading,
     this.message,
+    this.onMessageTap,
   });
+
+  /// Makes [message] tappable (e.g. scroll to the field that is missing).
+  final VoidCallback? onMessageTap;
 
   /// The main button (usually a FilledButton). Expands to fill the row.
   final Widget action;
@@ -46,7 +54,7 @@ class StickyActionBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (message != null) ...[
+              if (message != null && onMessageTap == null) ...[
                 Text(
                   message!,
                   textAlign: TextAlign.center,
@@ -55,6 +63,20 @@ class StickyActionBar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
+              ],
+              // Tappable reason: a 48 px text button with an arrow.
+              if (message != null && onMessageTap != null) ...[
+                TextButton.icon(
+                  onPressed: onMessageTap,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    foregroundColor: theme.colorScheme.onSurfaceVariant,
+                    textStyle: theme.textTheme.bodySmall,
+                  ),
+                  icon: const Icon(Icons.arrow_downward, size: 16),
+                  label: Text(message!, textAlign: TextAlign.center),
+                ),
+                const SizedBox(height: 4),
               ],
               Row(
                 children: [
