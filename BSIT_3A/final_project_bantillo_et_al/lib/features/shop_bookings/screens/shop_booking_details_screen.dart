@@ -283,6 +283,10 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
       icon: Icons.person_outline,
       children: [
         DetailRow(label: 'Name', value: booking.customerName),
+        // The name given at checkout (0012); the signature is checked
+        // against it, and it can differ from the account name.
+        if ((row.customerFullName ?? '').isNotEmpty)
+          DetailRow(label: 'Name on booking', value: row.customerFullName!),
         DetailRow(
           label: 'Mobile',
           value: phone.isEmpty ? 'Not provided' : phone,
@@ -404,6 +408,7 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
                 signedName: booking.signedName ?? '',
                 signedAt: acknowledgedAt,
                 version: version,
+                customerFullName: booking.customerFullName,
               ),
               icon: const Icon(Icons.description_outlined),
               label: const Text('View signed agreement'),
