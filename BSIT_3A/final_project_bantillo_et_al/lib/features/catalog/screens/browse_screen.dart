@@ -197,49 +197,55 @@ class _BrowseScreenState extends State<BrowseScreen> {
           Expanded(
             child: SizedBox(
               height: 48,
-              child: TextField(
-                controller: _search,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (text) =>
-                    _apply(_filter.copyWith(query: text.trim())),
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Search items...',
-                  hintStyle: const TextStyle(
-                    color: AppColors.textSecondary,
+              // Low #29: the design keeps a placeholder only, so screen
+              // readers get this label instead of a visible one.
+              child: Semantics(
+                label: 'Search gowns and suits',
+                textField: true,
+                child: TextField(
+                  controller: _search,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (text) =>
+                      _apply(_filter.copyWith(query: text.trim())),
+                  style: const TextStyle(
                     fontSize: 14,
+                    color: AppColors.textPrimary,
                   ),
-                  filled: true,
-                  fillColor: theme.colorScheme.surface,
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    size: 20,
-                    color: AppColors.textSecondary,
-                  ),
-                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _search,
-                    builder: (context, value, _) => value.text.isEmpty
-                        ? const SizedBox.shrink()
-                        : IconButton(
-                            tooltip: 'Clear search',
-                            icon: const Icon(Icons.close, size: 18),
-                            onPressed: () {
-                              _search.clear();
-                              _apply(_filter.copyWith(query: ''));
-                            },
-                          ),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.maroon),
+                  decoration: InputDecoration(
+                    hintText: 'Search items...',
+                    hintStyle: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                    filled: true,
+                    fillColor: theme.colorScheme.surface,
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: 20,
+                      color: AppColors.textSecondary,
+                    ),
+                    suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _search,
+                      builder: (context, value, _) => value.text.isEmpty
+                          ? const SizedBox.shrink()
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                _search.clear();
+                                _apply(_filter.copyWith(query: ''));
+                              },
+                            ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.maroon),
+                    ),
                   ),
                 ),
               ),
