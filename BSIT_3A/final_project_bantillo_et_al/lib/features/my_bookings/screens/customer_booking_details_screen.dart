@@ -97,40 +97,62 @@ class _CustomerBookingDetailsScreenState
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              DetailSection(title: 'Booking ${b.referenceNo}', children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: BookingStatusBadge(status: b.status),
-                ),
-              ]),
-              DetailSection(title: 'Items', children: [
-                if (d.items.isEmpty) const Text('No items found.'),
-                for (final item in d.items)
-                  Text('${item.name} (${item.size})'),
-              ]),
-              DetailSection(title: 'Dates', children: [
-                Text('Pickup: ${formatDate(b.pickupDate)}'),
-                Text('Event: ${formatDate(b.eventDate)}'),
-                Text('Return: ${formatDate(b.returnDate)}'),
-              ]),
-              DetailSection(title: 'Payments', children: [
-                Text('Option: ${b.paymentOption.label}'),
-                const SizedBox(height: 4),
-                if (d.payments.isEmpty) const Text('No payments recorded yet.'),
-                for (final p in d.payments)
-                  Text(
-                    '${formatPeso(p.amount)} • ${p.kind.label} • ${p.method}'
-                    ' • ${formatDateOrDash(p.createdAt)}',
+              DetailSection(
+                title: 'Booking ${b.referenceNo}',
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: BookingStatusBadge(status: b.status),
                   ),
-              ]),
-              DetailSection(title: 'Summary', children: [
-                Text('Total: ${formatPeso(b.totalAmount)}'),
-                Text('Paid: ${formatPeso(b.amountPaid)}'),
-                Text(
-                  'Balance: ${formatPeso(b.balance)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ]),
+                ],
+              ),
+              DetailSection(
+                title: 'Items',
+                children: [
+                  if (d.items.isEmpty) const Text('No items found.'),
+                  for (final item in d.items)
+                    Text('${item.name} (${item.size})'),
+                ],
+              ),
+              DetailSection(
+                title: 'Dates',
+                children: [
+                  Text('Pickup: ${formatDate(b.pickupDate)}'),
+                  Text('Event: ${formatDate(b.eventDate)}'),
+                  Text('Return: ${formatDate(b.returnDate)}'),
+                ],
+              ),
+              DetailSection(
+                title: 'Payments',
+                children: [
+                  Text('Option: ${b.paymentOption.label}'),
+                  const SizedBox(height: 4),
+                  if (d.payments.isEmpty)
+                    const Text('No payments recorded yet.'),
+                  for (final p in d.payments)
+                    Text(
+                      '${formatPeso(p.amount)} • ${p.kind.label} • ${p.method}'
+                      ' • ${formatDateOrDash(p.createdAt)}',
+                    ),
+                ],
+              ),
+              DetailSection(
+                title: 'Summary',
+                children: [
+                  Text('Total: ${formatPeso(b.totalAmount)}'),
+                  Text('Paid: ${formatPeso(b.amountPaid)}'),
+                  Text(
+                    'Balance: ${formatPeso(b.balance)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  // UI audit #8: payment deadline for pending requests.
+                  if (payByText(b) != null)
+                    Text(
+                      payByText(b)!,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                ],
+              ),
               if (d.canCancel) ...[
                 const SizedBox(height: 8),
                 OutlinedButton(
