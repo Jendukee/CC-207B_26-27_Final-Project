@@ -180,7 +180,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           'in the last ${_range.label}',
       builder: (context, data) => MonthBarChart(
         values: data,
-        color: AppColors.gold,
+        // UI audit #34: success green (about 5:1 on white) instead of
+        // gold (about 2.3:1, below the 3:1 needed for chart bars).
+        color: AppColors.success,
         formatValue: Formatters.peso,
         formatAxis: ReportMath.compactPeso,
       ),
