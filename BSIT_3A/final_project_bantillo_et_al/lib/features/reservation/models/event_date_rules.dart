@@ -10,6 +10,14 @@
 
 /// Pure helpers for choosing an event date.
 abstract final class EventDateRules {
+  /// Earliest event date a customer can choose: 2 days from today, so the
+  /// pick-up (day before) is tomorrow or later and the 48-hour payment
+  /// deadline ends before pick-up day (create_reservation, 0009).
+  static DateTime earliestEventDate([DateTime? now]) {
+    final base = now ?? DateTime.now();
+    return DateTime(base.year, base.month, base.day + 2);
+  }
+
   /// [date] without the time, so days compare correctly.
   static DateTime day(DateTime date) =>
       DateTime(date.year, date.month, date.day);
