@@ -18,6 +18,7 @@ import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/payment_instructions.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
 import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
@@ -79,7 +80,6 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
       booking.totalAmount,
       booking.paymentOption,
     );
-    final method = PlannedPaymentMethod.fromDb(booking.preferredPaymentMethod);
     final deadline = booking.expiresAt;
     const gap = EdgeInsets.fromLTRB(8, 0, 8, 8);
 
@@ -144,48 +144,16 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
           ),
         ),
 
-        // Payment instructions for the chosen method.
+        // Payment instructions for the chosen method. Phase 3: the shared
+        // PaymentInstructions widget, with the GCash number and the shop's
+        // contact numbers pre-filled (the same card as booking details).
         SectionCard(
           title: 'How to pay',
           icon: Icons.payments_outlined,
           margin: gap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (method == null || method == PlannedPaymentMethod.gcash) ...[
-                const Text('Send the amount to our GCash number:'),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SelectableText(
-                        ShopContact.gcash,
-                        style: theme.textTheme.titleLarge,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Copy GCash number',
-                      onPressed: () => copyWithSnack(
-                        context,
-                        ShopContact.gcash,
-                        'GCash number copied.',
-                      ),
-                      icon: const Icon(Icons.copy),
-                    ),
-                  ],
-                ),
-                Text(
-                  'Put your reference number ${booking.referenceNo} in the '
-                  'message, then send the screenshot to the shop.',
-                ),
-              ],
-              if (method == PlannedPaymentMethod.cash)
-                Text('Pay in cash at the shop: ${ShopContact.address}.'),
-              if (method == PlannedPaymentMethod.bank)
-                const Text(
-                  'Contact the shop for the bank account details, then send '
-                  'a photo of the deposit slip.',
-                ),
-            ],
+          child: PaymentInstructions(
+            method: booking.preferredPaymentMethod,
+            referenceNo: booking.referenceNo,
           ),
         ),
 
