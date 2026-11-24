@@ -1,11 +1,11 @@
 // Unit tests for PaymentPlan (customer redesign, Phase 1): the "Pay now"
 // and balance amounts on the checkout.
-// Run with: flutter test test/features/reservation
+// Run with: flutter test test/shared
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
+import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 void main() {
   test('50% reservation fee pays half now and half at pick-up', () {

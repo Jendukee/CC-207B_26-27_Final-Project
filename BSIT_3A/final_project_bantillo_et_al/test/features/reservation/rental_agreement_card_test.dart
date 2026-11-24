@@ -11,10 +11,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orange150_rental/core/config/shop_contact.dart';
 import 'package:orange150_rental/core/theme/app_theme.dart';
 import 'package:orange150_rental/features/reservation/models/agreement_form.dart';
-import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/features/reservation/widgets/rental_agreement_card.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/item.dart';
+import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 Future<TextEditingController> _pump(
   WidgetTester tester, {

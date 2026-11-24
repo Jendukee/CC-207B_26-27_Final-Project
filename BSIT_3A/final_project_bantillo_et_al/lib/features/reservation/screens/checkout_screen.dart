@@ -41,12 +41,12 @@ import 'package:orange150_rental/core/widgets/phone_form_field.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/reservation/models/agreement_form.dart';
-import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/features/reservation/widgets/rental_agreement_card.dart';
 import 'package:orange150_rental/features/reservation/widgets/reservation_step_indicator.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/item.dart';
+import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 /// Everything the checkout needs, loaded together.
 class _CheckoutData {

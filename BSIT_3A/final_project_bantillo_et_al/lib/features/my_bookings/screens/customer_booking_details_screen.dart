@@ -27,10 +27,10 @@ import 'package:orange150_rental/features/my_bookings/models/my_booking.dart';
 import 'package:orange150_rental/features/my_bookings/services/my_bookings_service.dart';
 import 'package:orange150_rental/features/my_bookings/widgets/booking_formatters.dart';
 import 'package:orange150_rental/features/my_bookings/widgets/booking_status_badge.dart';
-import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/booking_status.dart';
 import 'package:orange150_rental/shared/models/payment.dart';
+import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 class CustomerBookingDetailsScreen extends StatefulWidget {
   const CustomerBookingDetailsScreen({super.key, required this.bookingId});
