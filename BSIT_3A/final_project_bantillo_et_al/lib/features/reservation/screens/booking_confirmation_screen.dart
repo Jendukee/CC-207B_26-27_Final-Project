@@ -26,19 +26,13 @@ import 'package:orange150_rental/shared/models/booking.dart';
 
 /// The Request submitted screen.
 class BookingConfirmationScreen extends StatefulWidget {
-  /// Creates the screen for [bookingId]. [method] is the payment method
-  /// chosen at checkout (cash / gcash / bank), from the link.
-  const BookingConfirmationScreen({
-    super.key,
-    required this.bookingId,
-    this.method,
-  });
+  /// Creates the screen for [bookingId]. The payment method chosen at
+  /// checkout is read from the booking (bookings.preferred_payment_method,
+  /// migration 0011), not from the link.
+  const BookingConfirmationScreen({super.key, required this.bookingId});
 
   /// Path parameter.
   final String bookingId;
-
-  /// ?method= query parameter.
-  final String? method;
 
   @override
   State<BookingConfirmationScreen> createState() =>
@@ -85,7 +79,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
       booking.totalAmount,
       booking.paymentOption,
     );
-    final method = PlannedPaymentMethod.fromDb(widget.method);
+    final method = PlannedPaymentMethod.fromDb(booking.preferredPaymentMethod);
     final deadline = booking.expiresAt;
     const gap = EdgeInsets.fromLTRB(8, 0, 8, 8);
 

@@ -1,7 +1,6 @@
-// Small progress header for the reservation flow. The customer redesign
-// (Phase 1) turned the flow into Date -> Checkout -> Submitted, so the
-// labels are now passed in; the default keeps the old 3-step labels for
-// the older step screens.
+// Small progress header for the reservation flow:
+// Date -> Checkout -> Submitted (customer redesign). Labels can be passed
+// in; the default is the checkout flow.
 //
 // OWNER: Member 2.
 
@@ -13,7 +12,7 @@ class ReservationStepIndicator extends StatelessWidget {
   const ReservationStepIndicator({
     super.key,
     required this.step,
-    this.labels = const ['Date', 'Measurements', 'Review'],
+    this.labels = const ['Date', 'Checkout', 'Submitted'],
   });
 
   /// Current step, starting at 1.
