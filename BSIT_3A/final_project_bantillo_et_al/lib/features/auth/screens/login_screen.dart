@@ -8,6 +8,16 @@
 // role's home (customer -> Browse, staff/owner -> Dashboard). Staff who
 // sign in from a customer page (e.g. the Profile tab) go to the Dashboard.
 //
+// Customer redesign 2 (Phase 1):
+// - BrandAppBar with a back arrow (BackOrHomeButton): the previous screen
+//   if there is one, else Browse. Going back never completes the action
+//   that sent the guest here (Reserve, a heart) (H3).
+// - `reason` (LoginReasons): a short line saying why sign-in is needed,
+//   e.g. "Sign in to save favorites" (H2, H9).
+// - "Create one" opens Register with push, so its Back returns here (H3).
+// - AuthService is created on first use, so the screen can be built in
+//   widget tests without Supabase.
+//
 // OWNER: team lead.
 
 import 'package:flutter/material.dart';
@@ -18,18 +28,36 @@ import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/back_or_home_button.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/features/auth/services/auth_service.dart';
 
 /// Email/password sign-in form.
 class LoginScreen extends StatefulWidget {
   /// Creates the login screen.
-  const LoginScreen({super.key, this.from, this.staffMode = false});
+  const LoginScreen({
+    super.key,
+    this.from,
+    this.staffMode = false,
+    this.reason,
+  });
 
   /// Location to return to after sign in.
   final String? from;
 
   /// True when opened via "Staff sign in".
   final bool staffMode;
+
+  /// Why sign-in is needed (a [LoginReasons] value), or null.
+  final String? reason;
+
+  /// The line shown at the top for [reason]; null for unknown reasons
+  /// (only fixed texts are shown, never text taken from the link).
+  static String? reasonText(String? reason) => switch (reason) {
+    LoginReasons.favorites => 'Sign in to save favorites',
+    LoginReasons.reserve => 'Sign in to reserve this item',
+    _ => null,
+  };
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -39,7 +67,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  // Created on first sign-in attempt (not when the screen is built).
+  late final _authService = AuthService();
 
   bool _busy = false;
   bool _obscurePassword = true;
@@ -107,8 +136,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final title = widget.staffMode ? 'Staff sign in' : 'Sign in';
+    final reasonText = LoginScreen.reasonText(widget.reason);
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      // Shared header (H4) with a back arrow that always works (H3).
+      appBar: BrandAppBar(title: title, leading: const BackOrHomeButton()),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -120,6 +151,31 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Why the guest is here (e.g. after tapping a heart).
+                    if (reasonText != null) ...[
+                      Semantics(
+                        liveRegion: true,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: AppColors.maroon,
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                reasonText,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     Text(
                       widget.staffMode
                           ? 'Sign in with your Orange 150 staff account.'
@@ -186,7 +242,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 12),
                     if (!widget.staffMode)
                       TextButton(
-                        onPressed: () => context.goNamed(
+                        // push: Back from Register returns here (H3).
+                        onPressed: () => context.pushNamed(
                           RouteNames.register,
                           queryParameters: {
                             if (widget.from != null) 'from': widget.from!,
@@ -194,6 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: const Text('No account yet? Create one'),
                       ),
+                    // Always offered: leave without an account (H3).
                     TextButton(
                       onPressed: () => context.go(RoutePaths.browse),
                       child: const Text('Continue browsing as guest'),
