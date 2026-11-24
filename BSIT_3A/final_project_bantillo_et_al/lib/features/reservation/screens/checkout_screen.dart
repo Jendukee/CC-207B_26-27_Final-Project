@@ -3,22 +3,26 @@
 // chosen event date: /reserve/:itemId/checkout?date=yyyy-MM-dd
 //
 //   Card 1 Contact details  full name, mobile (pre-filled from Profile,
-//                           saved back to it), address
+//                           saved back to it), address (pre-filled from
+//                           profiles.address; saved to the profile only
+//                           if "Save this address to my profile" is ticked)
 //   Card 2 Item             photo, name, size, price
 //   Card 3 Rental schedule  pick-up / event / return, optional preferred
 //                           fitting date
 //   Card 4 Measurements     optional, pre-filled, collapsible
 //   Card 5 Payment option   50% reservation fee or full payment (radio
 //                           cards with amounts) and Cash / GCash / Bank
-//   Card 6 Rental agreement the shop's terms + agreement checkbox
-//                           (becomes the full e-contract in Phase 2)
+//   Card 6 Rental agreement the e-contract from the shop's paper form
+//                           (Phase 2, RentalAgreementCard) with the typed
+//                           signature and the agreement checkbox
 //   Sticky bar              "Total ₱X · Pay now ₱Y" + "Submit request",
 //                           disabled with a reason until the agreement is
-//                           accepted
+//                           signed
 //
-// Submitting calls create_reservation (0009) and opens the Request
-// submitted screen. Address, fitting date and payment method are collected
-// here; they are stored with the booking from Phase 2 (new columns).
+// Submitting calls create_reservation (0011), which stores the address,
+// Facebook account, fitting date, note, payment method, typed signature
+// and the exact terms shown (terms_snapshot), then opens the Request
+// submitted screen.
 //
 // OWNER: Member 2.
 
@@ -36,8 +40,10 @@ import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/phone_form_field.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
+import 'package:orange150_rental/features/reservation/models/agreement_form.dart';
 import 'package:orange150_rental/features/reservation/models/payment_plan.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
+import 'package:orange150_rental/features/reservation/widgets/rental_agreement_card.dart';
 import 'package:orange150_rental/features/reservation/widgets/reservation_step_indicator.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/item.dart';
@@ -49,6 +55,7 @@ class _CheckoutData {
     required this.available,
     required this.fullName,
     required this.phone,
+    required this.address,
     required this.measurements,
   });
 
@@ -58,6 +65,9 @@ class _CheckoutData {
   final bool available;
   final String fullName;
   final String phone;
+
+  /// profiles.address ('' when not saved).
+  final String address;
   final Map<String, dynamic>? measurements;
 }
 
@@ -110,11 +120,41 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   PaymentOption _option = PaymentOption.half;
   PlannedPaymentMethod _method = PlannedPaymentMethod.gcash;
 
-  // Card 6.
+  // Card 1: save the address to the profile? (only when ticked)
+  bool _saveAddress = false;
+  String _profileAddress = '';
+
+  // Card 6: e-contract fields and signature.
+  final TextEditingController _facebook = TextEditingController();
+  final TextEditingController _note = TextEditingController();
+  final TextEditingController _shoeSize = TextEditingController();
+  final TextEditingController _sleevesSize = TextEditingController();
+  final TextEditingController _signature = TextEditingController();
   bool _agreed = false;
+
+  /// When the signature became valid (shown as "Signed on ..."); null
+  /// while not signed.
+  DateTime? _signedAt;
 
   bool _submitting = false;
   bool _prefilled = false;
+
+  /// Signed = the typed name matches Card 1's full name AND the box is
+  /// ticked. Submit request stays disabled until then.
+  bool get _signed =>
+      _agreed && AgreementRules.nameMatches(_signature.text, _name.text);
+
+  /// Re-checks the signature after any change and keeps [_signedAt]: set
+  /// when it becomes valid, cleared when it becomes invalid again.
+  void _onSignatureChanged() {
+    setState(() {
+      if (_signed) {
+        _signedAt ??= DateTime.now();
+      } else {
+        _signedAt = null;
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -129,6 +169,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _phone,
       _address,
       _measureNotes,
+      _facebook,
+      _note,
+      _shoeSize,
+      _sleevesSize,
+      _signature,
       ..._measure.values,
     ]) {
       c.dispose();
@@ -145,12 +190,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _service.loadContact(),
       _service.loadSavedMeasurements(),
     ]);
-    final contact = results[2]! as ({String fullName, String phone});
+    final contact = results[2]! as CheckoutContact;
     return _CheckoutData(
       item: results[0]! as Item,
       available: results[1]! as bool,
       fullName: contact.fullName,
       phone: contact.phone,
+      address: contact.address,
       measurements: results[3] as Map<String, dynamic>?,
     );
   }
@@ -161,6 +207,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _prefilled = true;
     _name.text = data.fullName;
     _phone.text = Validators.normalizePhone(data.phone) ?? data.phone;
+    _address.text = data.address;
+    _profileAddress = data.address;
     final saved = data.measurements;
     if (saved != null) {
       for (final key in _measurementFields.keys) {
@@ -190,8 +238,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (picked != null) setState(() => _fittingDate = picked);
   }
 
+  /// Everything on the rental agreement, from the other cards.
+  AgreementForm _agreementForm(_CheckoutData data) => AgreementForm(
+    fullName: _name.text.trim(),
+    phone: _phone.text.trim(),
+    address: _address.text.trim(),
+    facebook: _facebook.text.trim(),
+    item: data.item,
+    eventDate: widget.eventDate!,
+    fittingDate: _fittingDate,
+    paymentOption: _option,
+    method: _method,
+    shoeSize: _shoeSize.text.trim(),
+    longSleevesSize: _sleevesSize.text.trim(),
+    waist: double.tryParse(_measure['waist']!.text.trim()),
+    shoulder: double.tryParse(_measure['shoulder']!.text.trim()),
+    adjustments: _measureNotes.text.trim(),
+    note: _note.text.trim(),
+  );
+
   Future<void> _submit(_CheckoutData data) async {
     final messenger = ScaffoldMessenger.of(context);
+    if (!_signed) return; // button is disabled; safety net
     if (!(_formKey.currentState?.validate() ?? false)) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Check the highlighted fields.')),
@@ -211,8 +279,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     setState(() => _submitting = true);
     try {
-      // 1. Keep the profile up to date with the contact details used.
-      await _service.saveContact(fullName: _name.text, phone: _phone.text);
+      // 1. Keep the profile up to date with the contact details used. The
+      //    address is saved to the profile only when the box is ticked.
+      await _service.saveContact(
+        fullName: _name.text,
+        phone: _phone.text,
+        address: _saveAddress ? _address.text : null,
+      );
 
       // 2. Measurements (optional).
       final measurements = <String, dynamic>{};
@@ -227,21 +300,45 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         await _service.saveMeasurements(measurements);
       }
 
-      // 3. The booking itself (create_reservation, one transaction).
+      // Accessory sizes from the agreement travel with the measurements
+      // snapshot (the measurements table itself only keeps body sizes).
+      final snapshotMeasurements = {
+        ...measurements,
+        if (_shoeSize.text.trim().isNotEmpty)
+          'shoe_size': _shoeSize.text.trim(),
+        if (_sleevesSize.text.trim().isNotEmpty)
+          'long_sleeves_size': _sleevesSize.text.trim(),
+      };
+
+      // 3. The booking with its signed e-contract (create_reservation,
+      //    one transaction; it re-checks the signature too).
+      final signedAt = _signedAt ?? DateTime.now();
+      final form = _agreementForm(data);
       final booking = await _service.submitReservation(
         itemId: widget.itemId,
         eventDate: widget.eventDate!,
         paymentOption: _option,
-        measurementsSnapshot: measurements,
+        measurementsSnapshot: snapshotMeasurements,
         termsVersion: RentalTerms.version,
+        signedName: _signature.text,
+        termsAcknowledgedAt: signedAt,
+        termsSnapshot: form.toSnapshot(
+          signedName: _signature.text,
+          signedAt: signedAt,
+        ),
+        paymentMethod: _method,
+        address: _address.text,
+        facebook: _facebook.text,
+        fittingDate: _fittingDate,
+        notes: _note.text,
       );
       if (!mounted) return;
 
       // go (not push): Back from "Request submitted" must not return here.
+      // The payment method is now saved with the booking (no link value).
       context.goNamed(
         RouteNames.bookingConfirmation,
         pathParameters: {'bookingId': booking.id},
-        queryParameters: {'method': _method.dbValue},
       );
     } catch (error) {
       if (!mounted) return;
@@ -301,9 +398,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final total = data.item.price;
     final now = PaymentPlan.dueNow(total, _option);
     return StickyActionBar(
-      message: _agreed
+      message: _signed
           ? null
-          : 'Accept the rental agreement (last card) to submit.',
+          : 'Sign the rental agreement (last card): type your full name '
+                'and tick the box.',
       leading: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,7 +420,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ],
       ),
       action: FilledButton(
-        onPressed: _agreed && !_submitting ? () => _submit(data) : null,
+        onPressed: _signed && !_submitting ? () => _submit(data) : null,
         child: _submitting
             ? const SizedBox.square(
                 dimension: 20,
@@ -383,6 +481,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.name],
                   autovalidateMode: AutovalidateMode.onUserInteraction,
+                  // The signature must match this name, so re-check it.
+                  onChanged: (_) => _onSignatureChanged(),
                   decoration: const InputDecoration(labelText: 'Full name *'),
                   validator: (v) =>
                       Validators.required(v, fieldName: 'Full name'),
@@ -400,11 +500,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   textCapitalization: TextCapitalization.words,
                   autofillHints: const [AutofillHints.fullStreetAddress],
                   maxLength: 200,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Address (optional)',
                     helperText: 'Barangay and city, e.g. Jaro, Iloilo City',
                   ),
                 ),
+                // Only offered when the address differs from the profile;
+                // the profile changes only if the customer ticks it.
+                if (_address.text.trim() != _profileAddress)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: _saveAddress,
+                    onChanged: _submitting
+                        ? null
+                        : (v) => setState(() => _saveAddress = v ?? false),
+                    title: const Text('Save this address to my profile'),
+                  ),
               ],
             ),
           ),
@@ -617,31 +730,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
 
-          // Card 6: rental agreement (full e-contract in Phase 2).
+          // Card 6: the e-contract (shop's paper reservation form).
           SectionCard(
             title: 'Rental agreement',
             icon: Icons.assignment_outlined,
             margin: gap,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < RentalTerms.items.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text('${i + 1}. ${RentalTerms.items[i]}'),
-                  ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: _agreed,
-                  onChanged: _submitting
-                      ? null
-                      : (v) => setState(() => _agreed = v ?? false),
-                  title: const Text(
-                    'I have read and agree to the rental terms of Orange 150.',
-                  ),
-                ),
-              ],
+            child: RentalAgreementCard(
+              form: _agreementForm(data),
+              facebook: _facebook,
+              note: _note,
+              shoeSize: _shoeSize,
+              longSleevesSize: _sleevesSize,
+              signature: _signature,
+              agreed: _agreed,
+              signedAt: _signedAt,
+              enabled: !_submitting,
+              onAgreedChanged: (value) {
+                _agreed = value;
+                _onSignatureChanged();
+              },
+              // Rebuild so the read-only rows follow the editable fields.
+              onChanged: _onSignatureChanged,
             ),
           ),
         ],
