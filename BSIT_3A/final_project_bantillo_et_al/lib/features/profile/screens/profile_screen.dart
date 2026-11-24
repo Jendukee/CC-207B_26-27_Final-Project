@@ -1,26 +1,36 @@
-// Profile tab for customer contact details, measurements and privacy.
+// Profile tab as a "Me" page (customer redesign, Phase 1):
+//   * a maroon header with the customer's name and mobile
+//   * "My bookings" shortcut icons for the 5 order tabs, with counts;
+//     each opens /my-bookings?tab=...
+//   * list tiles: Measurements, Contact details, Rental terms, Privacy and
+//     data (its own page), and Sign out (asks first, shown in red)
+// Guests see the sign-in prompt with the "Staff sign in" link.
 //
-// UI audit changes: errors are plain language (friendlyErrorMessage, #12),
-// Sign out asks first and is styled as destructive (#17), and dates use
-// the shared Formatters (#23).
+// UI audit changes kept: friendly errors (#12), sign-out confirmation
+// (#17), shared Formatters (#23).
 //
 // OWNER: Member 2.
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import 'package:orange150_rental/core/config/rental_terms.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
-import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
+import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/sign_in_prompt.dart';
-import 'package:orange150_rental/features/profile/models/data_deletion_request.dart';
 import 'package:orange150_rental/features/profile/models/profile_data.dart';
+import 'package:orange150_rental/features/profile/profile_routes.dart';
 import 'package:orange150_rental/features/profile/services/profile_service.dart';
 import 'package:orange150_rental/features/profile/widgets/profile_contact_editor.dart';
 import 'package:orange150_rental/features/profile/widgets/profile_measurements_editor.dart';
+import 'package:orange150_rental/shared/models/customer_booking_tab.dart';
 
-/// Signed-in customer profile and privacy settings.
+/// The Me page.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -31,36 +41,20 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final ProfileService _service = ProfileService();
   Future<ProfileData>? _profileFuture;
-  Future<DataDeletionRequest?>? _deletionRequestFuture;
+  Future<Map<CustomerBookingTab, int>>? _countsFuture;
   String? _loadedForUserId;
   bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final userId = SessionController.instance.user?.id;
-    if (userId != null) {
-      _loadForUser(userId);
-    }
-  }
 
   void _loadForUser(String userId) {
     _loadedForUserId = userId;
     _profileFuture = _service.getProfileData();
-    _deletionRequestFuture = _service.getOpenDeletionRequest();
+    _countsFuture = _service.bookingCounts();
   }
 
   void _refresh() {
     final userId = SessionController.instance.user?.id;
     if (userId == null) return;
     setState(() => _loadForUser(userId));
-  }
-
-  void _refreshDeletionRequest() {
-    if (_deletionRequestFuture == null) return;
-    setState(() {
-      _deletionRequestFuture = _service.getOpenDeletionRequest();
-    });
   }
 
   void _showMessage(String message) {
@@ -125,111 +119,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _updatePrivacyConsent(bool consented) async {
-    if (!consented) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Withdraw privacy consent?'),
-          content: const Text(
-            'This will record that you withdrew consent. It will not delete '
-            'your profile or booking data. You can submit a separate deletion '
-            'request below.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Keep consent'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Withdraw'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      await _service.updatePrivacyConsent(consented: consented);
-      await SessionController.instance.reload();
-      if (!mounted) return;
-      _refresh();
-      _showMessage(
-        consented ? 'Privacy consent recorded.' : 'Privacy consent withdrawn.',
-      );
-    } catch (error) {
-      _showMessage(
-        friendlyErrorMessage(
-          error,
-          fallback: 'Could not update privacy consent. Please try again.',
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _requestDeletion() async {
-    final reasonController = TextEditingController();
-    final reason = await showDialog<String>(
+  void _showTerms() {
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Request data deletion'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This sends a request to shop staff for review. Your account '
-              'and data will not be deleted immediately.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonController,
-              maxLength: 500,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Reason (optional)',
-                alignLabelWithHint: true,
-              ),
-            ),
-          ],
+        title: const Text('Rental terms'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < RentalTerms.items.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('${i + 1}. ${RentalTerms.items[i]}'),
+                ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(context).pop(reasonController.text.trim()),
-            child: const Text('Send request'),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
-    reasonController.dispose();
-    if (reason == null || !mounted) return;
-
-    setState(() => _busy = true);
-    try {
-      await _service.requestDataDeletion(reason: reason);
-      if (!mounted) return;
-      _refreshDeletionRequest();
-      _showMessage('Your data deletion request was sent for review.');
-    } catch (error) {
-      _showMessage(
-        friendlyErrorMessage(
-          error,
-          fallback: 'Could not send the deletion request. Please try again.',
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   /// UI audit #17: asks before signing out (a destructive action).
@@ -274,7 +188,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final session = SessionController.instance;
+    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainerLow,
       appBar: AppBar(
         title: const Text('Profile'),
         actions: [
@@ -293,24 +209,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _loadedForUserId = null;
             return const SignInPrompt(
               message:
-                  'Sign in to see your measurements, contact details '
-                  'and privacy settings.',
+                  'Sign in to see your bookings, measurements, contact '
+                  'details and privacy settings.',
               from: RoutePaths.profile,
               showStaffLink: true,
             );
           }
           final userId = session.user!.id;
-          if (_loadedForUserId != userId) {
-            _loadForUser(userId);
-          }
+          if (_loadedForUserId != userId) _loadForUser(userId);
           return FutureBuilder<ProfileData>(
             future: _profileFuture!,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
+                return const LoadingView(message: 'Loading your profile...');
               }
               if (snapshot.hasError) {
-                return _ProfileLoadError(
+                return ErrorView(
                   message: friendlyErrorMessage(
                     snapshot.error!,
                     fallback: 'Could not load your profile. Please try again.',
@@ -318,7 +232,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onRetry: _refresh,
                 );
               }
-              return _profileContent(snapshot.requireData);
+              return _content(snapshot.requireData, theme);
             },
           );
         },
@@ -326,23 +240,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _profileContent(ProfileData profile) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+  Widget _content(ProfileData profile, ThemeData theme) {
+    final name = profile.fullName.trim();
+    final phone = profile.phone?.trim() ?? '';
+    const gap = EdgeInsets.fromLTRB(8, 8, 8, 0);
+
+    return RefreshIndicator(
+      onRefresh: () async => _refresh(),
+      child: ListView(
+        children: [
+          if (_busy) const LinearProgressIndicator(),
+          // Header.
+          Container(
+            color: AppColors.maroon,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
             child: Row(
               children: [
                 CircleAvatar(
-                  radius: 28,
+                  radius: 30,
+                  backgroundColor: AppColors.goldTint,
+                  foregroundColor: AppColors.maroon,
                   child: Text(
-                    profile.fullName.trim().isEmpty
-                        ? (profile.email.isEmpty
-                              ? '?'
-                              : profile.email.substring(0, 1).toUpperCase())
-                        : profile.fullName.trim().substring(0, 1).toUpperCase(),
+                    name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+                    style: theme.textTheme.headlineSmall,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -351,223 +271,151 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        profile.fullName.trim().isEmpty
-                            ? 'Your profile'
-                            : profile.fullName,
-                        style: Theme.of(context).textTheme.titleLarge,
+                        name.isEmpty ? 'Add your name' : name,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: AppColors.onMaroon,
+                        ),
                       ),
-                      Text(profile.email),
+                      Text(
+                        phone.isEmpty ? 'No mobile number yet' : phone,
+                        style: const TextStyle(color: AppColors.onMaroon),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                title: const Text('Contact details'),
-                subtitle: Text(
-                  'Name: ${profile.fullName.isEmpty ? 'Not set' : profile.fullName}\n'
-                  'Mobile: ${profile.phone?.isNotEmpty == true ? profile.phone : 'Not set'}',
-                ),
-                isThreeLine: true,
-                trailing: IconButton(
-                  tooltip: 'Edit contact details',
-                  onPressed: _busy ? null : () => _editContact(profile),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ),
-            ],
+
+          // Booking shortcuts with counts.
+          SectionCard(
+            title: 'My bookings',
+            margin: gap,
+            trailing: TextButton(
+              onPressed: () => context.goNamed(RouteNames.myBookings),
+              child: const Text('View all'),
+            ),
+            child: FutureBuilder<Map<CustomerBookingTab, int>>(
+              future: _countsFuture,
+              builder: (context, snapshot) {
+                final counts = snapshot.data ?? const {};
+                return Row(
+                  children: [
+                    for (final tab in CustomerBookingTab.values)
+                      Expanded(child: _shortcut(tab, counts[tab] ?? 0, theme)),
+                  ],
+                );
+              },
+            ),
           ),
-        ),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                title: const Text('Measurements'),
-                subtitle: Text(
+
+          SectionCard(
+            margin: gap,
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                _tile(
+                  Icons.straighten,
+                  'Measurements',
                   profile.measurements?.hasValues == true
-                      ? _measurementSummary(profile.measurements!)
-                      : 'No measurements saved.',
+                      ? 'Saved'
+                      : 'Not saved yet',
+                  () => _editMeasurements(profile),
                 ),
-                isThreeLine: true,
-                trailing: IconButton(
-                  tooltip: 'Edit measurements',
-                  onPressed: _busy ? null : () => _editMeasurements(profile),
-                  icon: const Icon(Icons.edit_outlined),
+                const Divider(height: 1),
+                _tile(
+                  Icons.contact_phone_outlined,
+                  'Contact details',
+                  phone.isEmpty ? 'Add your mobile number' : phone,
+                  () => _editContact(profile),
                 ),
-              ),
-              if (profile.measurements?.updatedAt != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Updated ${Formatters.dateTime(profile.measurements!.updatedAt!)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
+                const Divider(height: 1),
+                _tile(
+                  Icons.assignment_outlined,
+                  'Rental terms',
+                  'What you agree to when you reserve',
+                  _showTerms,
                 ),
-              if (profile.measurements?.notes?.isNotEmpty == true)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Notes: ${profile.measurements!.notes}'),
-                  ),
+                const Divider(height: 1),
+                _tile(
+                  Icons.privacy_tip_outlined,
+                  'Privacy and data',
+                  'Consent and data deletion',
+                  () => context.pushNamed(ProfileRoutes.privacyName),
                 ),
-            ],
-          ),
-        ),
-        Card(
-          child: Column(
-            children: [
-              SwitchListTile(
-                value: profile.hasPrivacyConsent,
-                onChanged: _busy ? null : _updatePrivacyConsent,
-                title: const Text('Privacy consent'),
-                subtitle: Text(
-                  profile.hasPrivacyConsent
-                      ? 'Consent recorded ${Formatters.dateTime(profile.privacyConsentAt!)}.'
-                      : 'Consent is currently withdrawn.',
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Changing consent does not delete your profile or existing '
-                    'booking records. Use the deletion request below to ask '
-                    'the shop to review your data.',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        _deletionRequestSection(),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          // Red: destructive action (same style as staff Cancel booking).
-          style: OutlinedButton.styleFrom(foregroundColor: AppColors.deepRed),
-          onPressed: _busy ? null : _signOut,
-          icon: const Icon(Icons.logout),
-          label: const Text('Sign out'),
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _deletionRequestSection() {
-    return FutureBuilder<DataDeletionRequest?>(
-      future: _deletionRequestFuture!,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(child: CircularProgressIndicator()),
+              ],
             ),
-          );
-        }
-        if (snapshot.hasError) {
-          return Card(
+          ),
+
+          SectionCard(
+            margin: gap,
+            padding: EdgeInsets.zero,
             child: ListTile(
-              title: const Text('Data deletion request'),
-              // No raw error text for customers; Retry is on the right.
-              subtitle: const Text(
-                'Could not load your deletion request. Please try again.',
+              leading: const Icon(Icons.logout, color: AppColors.deepRed),
+              title: const Text(
+                'Sign out',
+                style: TextStyle(color: AppColors.deepRed),
               ),
-              trailing: IconButton(
-                tooltip: 'Retry',
-                onPressed: _busy ? null : _refreshDeletionRequest,
-                icon: const Icon(Icons.refresh),
-              ),
-            ),
-          );
-        }
-
-        final request = snapshot.data;
-        if (request != null) {
-          final created = Formatters.date(request.createdAt);
-          return Card(
-            child: ListTile(
-              title: const Text('Data deletion request'),
-              subtitle: Text(
-                '${request.statusLabel} · submitted $created'
-                '${request.reason?.isNotEmpty == true ? '\nReason: ${request.reason}' : ''}',
-              ),
-              isThreeLine: request.reason?.isNotEmpty == true,
-              leading: const Icon(Icons.pending_actions),
-            ),
-          );
-        }
-
-        return Card(
-          child: ListTile(
-            title: const Text('Request data deletion'),
-            subtitle: const Text(
-              'Send a request to shop staff for review. This does not '
-              'automatically delete your account or data.',
-            ),
-            trailing: IconButton(
-              tooltip: 'Request data deletion',
-              onPressed: _busy ? null : _requestDeletion,
-              icon: const Icon(Icons.arrow_forward),
+              onTap: _busy ? null : _signOut,
             ),
           ),
-        );
-      },
-    );
-  }
-
-  String _measurementSummary(ProfileMeasurements measurements) {
-    final values = <String, double?>{
-      'Chest': measurements.chest,
-      'Waist': measurements.waist,
-      'Hips': measurements.hips,
-      'Shoulder': measurements.shoulder,
-      'Height': measurements.height,
-      'Inseam': measurements.inseam,
-    };
-    return values.entries
-        .where((entry) => entry.value != null)
-        .map((entry) => '${entry.key}: ${_number(entry.value!)} in')
-        .join(' · ');
-  }
-
-  String _number(double value) => value == value.roundToDouble()
-      ? value.toInt().toString()
-      : value.toString();
-}
-
-class _ProfileLoadError extends StatelessWidget {
-  const _ProfileLoadError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-          ),
         ],
       ),
-    ),
+    );
+  }
+
+  static const Map<CustomerBookingTab, IconData> _tabIcons = {
+    CustomerBookingTab.toPay: Icons.account_balance_wallet_outlined,
+    CustomerBookingTab.toPickUp: Icons.inventory_2_outlined,
+    CustomerBookingTab.rented: Icons.checkroom_outlined,
+    CustomerBookingTab.completed: Icons.task_alt,
+    CustomerBookingTab.cancelled: Icons.cancel_outlined,
+  };
+
+  /// One shortcut icon with its count badge.
+  Widget _shortcut(CustomerBookingTab tab, int count, ThemeData theme) {
+    return Semantics(
+      button: true,
+      label: '${tab.label}: $count',
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => context.go('${RoutePaths.myBookings}?tab=${tab.key}'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              Badge(
+                isLabelVisible: count > 0,
+                label: Text('$count'),
+                backgroundColor: AppColors.deepRed,
+                child: Icon(_tabIcons[tab], color: AppColors.maroon, size: 28),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                tab.label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tile(
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback onTap,
+  ) => ListTile(
+    leading: Icon(icon, color: AppColors.maroon),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: _busy ? null : onTap,
   );
 }

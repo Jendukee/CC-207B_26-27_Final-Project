@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:orange150_rental/core/services/supabase_service.dart';
 import 'package:orange150_rental/features/profile/models/data_deletion_request.dart';
 import 'package:orange150_rental/features/profile/models/profile_data.dart';
+import 'package:orange150_rental/shared/models/booking.dart';
+import 'package:orange150_rental/shared/models/customer_booking_tab.dart';
 
 /// Reads and updates the signed-in customer's own profile data.
 class ProfileService {
@@ -33,6 +35,15 @@ class ProfileService {
       profile: profile,
       measurements: measurements,
     );
+  }
+
+  /// How many of the customer's bookings are in each My Bookings tab, for
+  /// the shortcut icons on the Me page (customer redesign). RLS returns
+  /// only the customer's own bookings.
+  Future<Map<CustomerBookingTab, int>> bookingCounts() async {
+    _requireUser();
+    final rows = await _client.from('bookings').select();
+    return CustomerBookingTab.countAll(rows.map(Booking.fromMap));
   }
 
   /// Updates full name and phone in profiles.
