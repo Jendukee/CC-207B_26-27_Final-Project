@@ -3,8 +3,8 @@
 //   * a maroon status banner that says what to do next
 //   * a vertical timeline: Requested, Reserved, Picked up, Returned
 //   * Item, Rental schedule and Payment cards (paid, balance, method)
-//   * the signed agreement summary (version and date; Phase 2 adds the
-//     typed signature)
+//   * the signed agreement: "Signed as <name> on <date>" and "View signed
+//     agreement", which opens the exact form saved at signing (Phase 2)
 //   * "Contact the shop" and, while allowed, "Cancel booking" (asks first)
 //
 // OWNER: Member 2.
@@ -15,6 +15,7 @@ import 'package:orange150_rental/core/config/rental_terms.dart';
 import 'package:orange150_rental/core/config/shop_contact.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/agreement_document.dart';
 import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
@@ -276,16 +277,39 @@ class _CustomerBookingDetailsScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Phase 2: the typed signature and the exact agreement.
                 Text(
-                  b.termsAcknowledgedAt == null
+                  b.isSigned
+                      ? 'Signed as ${b.signedName}'
+                            '${b.termsAcknowledgedAt == null ? '' : ' on ${Formatters.dateTime(b.termsAcknowledgedAt!)}'}'
+                            '${b.termsVersion == null ? '' : ' (terms version ${b.termsVersion})'}.'
+                      : b.termsAcknowledgedAt == null
                       ? 'No signed agreement is saved for this booking.'
-                      : 'You agreed to the rental terms'
-                            '${b.termsVersion == null ? '' : ' (version ${b.termsVersion})'}'
-                            ' on ${Formatters.dateTime(b.termsAcknowledgedAt!)}.',
+                      : 'You agreed to the rental terms on '
+                            '${Formatters.dateTime(b.termsAcknowledgedAt!)}.',
                 ),
+                if (b.preferredFittingDate != null)
+                  Text(
+                    'Preferred fitting date: '
+                    '${formatDate(b.preferredFittingDate!)}',
+                  ),
+                // Signed bookings show the saved form; older ones the
+                // current terms.
                 TextButton(
-                  onPressed: () => _showTerms(context),
-                  child: const Text('View rental terms'),
+                  onPressed: b.termsSnapshot == null
+                      ? () => _showTerms(context)
+                      : () => showSignedAgreement(
+                          context,
+                          snapshot: b.termsSnapshot!,
+                          signedName: b.signedName ?? '',
+                          signedAt: b.termsAcknowledgedAt,
+                          version: b.termsVersion,
+                        ),
+                  child: Text(
+                    b.termsSnapshot == null
+                        ? 'View rental terms'
+                        : 'View signed agreement',
+                  ),
                 ),
               ],
             ),
