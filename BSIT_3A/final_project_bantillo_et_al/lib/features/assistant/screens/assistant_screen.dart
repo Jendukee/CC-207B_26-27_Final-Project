@@ -160,7 +160,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Style Assistant'),
+                Text('Assistant'), // matches the tab label (UI audit #38)
                 Text(
                   'Orange 150',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
@@ -358,6 +358,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
             const SizedBox(width: 8),
             IconButton(
               onPressed: _isLoading ? null : () => _sendMessage(),
+              tooltip: 'Send message', // UI audit #39
               icon: const Icon(Icons.send_rounded),
               style: IconButton.styleFrom(
                 backgroundColor: AppColors.maroon,
