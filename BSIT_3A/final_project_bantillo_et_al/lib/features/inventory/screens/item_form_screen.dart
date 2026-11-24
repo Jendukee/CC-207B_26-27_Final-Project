@@ -5,7 +5,9 @@
 // successful insert the form switches to edit mode, so pressing Save again
 // after an error updates the item instead of creating a duplicate; type and
 // age group use SegmentedButtons (#21); the price accepts numbers only
-// (#16); retiring an item asks for confirmation (#18).
+// (#16); retiring an item asks for confirmation (#18); live validation
+// (#26), FilledButton (#27), shared Loading/Error views (#28), inclusions
+// as chips and a discard-changes warning (#40).
 //
 // OWNER: Member 1.
 
@@ -16,6 +18,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
+import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
 
@@ -40,7 +44,16 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   final _sizeController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
+
+  /// Text box for typing ONE new inclusion (added as a chip, UI audit #40).
   final _inclusionsController = TextEditingController();
+
+  /// The item's inclusions, shown as chips with a remove button.
+  final List<String> _inclusions = [];
+
+  /// True once anything was changed; Back then asks before discarding
+  /// (UI audit #40).
+  bool _dirty = false;
 
   ItemType _type = ItemType.gown;
   AgeGroup _ageGroup = AgeGroup.adult;
@@ -105,7 +118,9 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         _sizeController.text = item.size;
         _priceController.text = item.price.toString();
         _descriptionController.text = item.description;
-        _inclusionsController.text = item.inclusions.join(', ');
+        _inclusions
+          ..clear()
+          ..addAll(item.inclusions);
 
         _type = item.type;
         _ageGroup = item.ageGroup;
@@ -136,6 +151,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
       setState(() {
         _newPhotos.addAll(photos);
+        _dirty = true;
       });
     } catch (e) {
       if (!mounted) return;
@@ -166,12 +182,55 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     });
   }
 
+  /// Adds the typed inclusion as a chip (ignores blanks and duplicates).
+  void _addInclusion() {
+    final value = _inclusionsController.text.trim();
+    if (value.isEmpty) return;
+    setState(() {
+      final exists = _inclusions.any(
+        (i) => i.toLowerCase() == value.toLowerCase(),
+      );
+      if (!exists) _inclusions.add(value);
+      _inclusionsController.clear();
+      _dirty = true;
+    });
+  }
+
+  /// The inclusions to save, including text typed but not yet added.
   List<String> _parseInclusions() {
-    return _inclusionsController.text
-        .split(',')
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toList();
+    final pending = _inclusionsController.text.trim();
+    return [
+      ..._inclusions,
+      if (pending.isNotEmpty &&
+          !_inclusions.any((i) => i.toLowerCase() == pending.toLowerCase()))
+        pending,
+    ];
+  }
+
+  /// Back with unsaved changes: ask before throwing them away.
+  Future<void> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your changes to this item have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.deepRed),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      _dirty = false;
+      Navigator.of(context).pop();
+    }
   }
 
   /// UI audit #18: asks before retiring, because a retired item leaves the
@@ -285,6 +344,7 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         ),
       );
 
+      _dirty = false; // saved: leaving no longer needs a warning
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -432,11 +492,15 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   Widget _buildForm() {
     return Form(
       key: _formKey,
+      // Any typed change marks the form as changed (discard warning).
+      onChanged: () => _dirty = true,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           TextFormField(
             controller: _nameController,
+            // UI audit #26: errors show once the field was touched.
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             decoration: const InputDecoration(
               labelText: 'Item Name *',
               hintText: 'e.g. Ivory Ball Gown',
@@ -470,6 +534,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _sizeController,
+            // UI audit #26: errors show once the field was touched.
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             decoration: const InputDecoration(
               labelText: 'Size *',
               hintText: 'e.g. S, M, L, 8-10',
@@ -485,6 +551,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _priceController,
+            // UI audit #26: errors show once the field was touched.
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             // UI audit #16: digits and one decimal point (max 2 decimals).
             inputFormatters: Validators.moneyFormatters,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -539,15 +607,55 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _inclusionsController,
-            decoration: const InputDecoration(
-              labelText: 'Inclusions',
-              hintText: 'Veil, Petticoat, Necklace',
-              helperText: 'Separate inclusions with commas.',
-              border: OutlineInputBorder(),
-            ),
+          // UI audit #40: inclusions as chips. Type one, press Add (or
+          // Enter); remove one with its x.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _inclusionsController,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _addInclusion(),
+                  decoration: const InputDecoration(
+                    labelText: 'Add an inclusion',
+                    hintText: 'e.g. Veil',
+                    helperText: 'Free accessories that come with the item.',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 56,
+                child: OutlinedButton(
+                  onPressed: _isSaving ? null : _addInclusion,
+                  child: const Text('Add'),
+                ),
+              ),
+            ],
           ),
+          if (_inclusions.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final inclusion in _inclusions)
+                  InputChip(
+                    label: Text(inclusion),
+                    onDeleted: _isSaving
+                        ? null
+                        : () => setState(() {
+                            _inclusions.remove(inclusion);
+                            _dirty = true;
+                          }),
+                    deleteButtonTooltipMessage: 'Remove $inclusion',
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 24),
           _buildPhotoSection(),
           const SizedBox(height: 24),
@@ -555,18 +663,26 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
             Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 12),
           ],
+          // UI audit #27: the app's primary button style (FilledButton).
           SizedBox(
             height: 50,
-            child: ElevatedButton(
+            child: FilledButton(
               onPressed: _isSaving ? null : _saveItem,
               child: _isSaving
-                  ? const CircularProgressIndicator()
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : Text(_isEditing ? 'Save Changes' : 'Add Item'),
             ),
           ),
           const SizedBox(height: 12),
           OutlinedButton(
-            onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+            // Same discard check as Back.
+            onPressed: _isSaving
+                ? null
+                : () =>
+                      _dirty ? _confirmDiscard() : Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
           const SizedBox(height: 24),
@@ -577,29 +693,22 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Edit Item' : 'Add Item')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          // Only a failed LOAD replaces the form; a failed save does not.
-          : _loadError != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_loadError!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _loadItem,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : _buildForm(),
+    // UI audit #40: Back with unsaved changes asks first.
+    return PopScope(
+      canPop: !_dirty || _isSaving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: Text(_isEditing ? 'Edit Item' : 'Add Item')),
+        // UI audit #28: the shared loading and error (Retry) views.
+        body: _isLoading
+            ? const LoadingView(message: 'Loading item...')
+            // Only a failed LOAD replaces the form; a failed save does not.
+            : _loadError != null
+            ? ErrorView(message: _loadError!, onRetry: _loadItem)
+            : _buildForm(),
+      ),
     );
   }
 }
