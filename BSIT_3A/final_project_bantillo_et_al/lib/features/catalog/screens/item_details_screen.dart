@@ -1,15 +1,57 @@
+// Item details, laid out like a product page (customer redesign, Phase 1):
+//   * full-width swipeable photo carousel with a page indicator
+//   * white section cards on a light grey page: price and name, size,
+//     "Inclusions (free accessories)", description, availability calendar
+//   * a sticky bottom bar: "Ask" (opens the Assistant) and a full-width
+//     maroon "Reserve Now"
+//
+// Reserve Now:
+//   * guests go to Login and come back here afterwards (?from=...)
+//   * signed-in customers get the Reserve sheet to pick the event date,
+//     then the checkout opens: /reserve/:itemId/checkout?date=yyyy-MM-dd
+//     (route defined in reservation_routes.dart; opened by path only)
+//
+// Customer redesign 2 (Phase 1): the shared BrandAppBar with a favorites
+// heart in the header actions (H4, H7); guests reach Login with push, so
+// Back returns here (H3).
+//
+// OWNER: Member 1.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/services/session_controller.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
+import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/catalog/services/catalog_service.dart';
+import 'package:orange150_rental/features/catalog/widgets/availability_calendar.dart';
+import 'package:orange150_rental/features/catalog/widgets/favorite_button.dart';
+import 'package:orange150_rental/features/catalog/widgets/photo_carousel.dart';
+import 'package:orange150_rental/features/catalog/widgets/reserve_date_sheet.dart';
+import 'package:orange150_rental/core/utils/event_date_rules.dart';
 import 'package:orange150_rental/shared/models/item.dart';
+
+/// The item plus its booked days for the availability calendar.
+class _DetailsData {
+  const _DetailsData(this.item, this.blockedDays);
+
+  final Item item;
+  final Set<DateTime> blockedDays;
+}
 
 /// Displays the photos and information of one rentable item.
 class ItemDetailsScreen extends StatefulWidget {
+  /// Creates the screen for [itemId].
   const ItemDetailsScreen({super.key, required this.itemId});
 
+  /// Path parameter from the route.
   final String itemId;
 
   @override
@@ -17,274 +59,229 @@ class ItemDetailsScreen extends StatefulWidget {
 }
 
 class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
-  final CatalogService _catalogService = CatalogService();
+  final CatalogService _service = CatalogService();
+  late Future<_DetailsData> _future;
 
-  late Future<Item> _itemFuture;
+  /// Booking window offered: from 2 days ahead, for one year.
+  final DateTime _earliest = EventDateRules.earliestEventDate();
+  late final DateTime _latest = DateTime(
+    _earliest.year + 1,
+    _earliest.month,
+    _earliest.day,
+  );
 
   @override
   void initState() {
     super.initState();
-    _loadItem();
+    _future = _load();
   }
 
-  void _loadItem() {
-    _itemFuture = _catalogService.getItem(widget.itemId);
+  Future<_DetailsData> _load() async {
+    final item = await _service.getItem(widget.itemId);
+    Set<DateTime> blocked;
+    try {
+      blocked = (await _service.getBlockedDates(
+        itemId: widget.itemId,
+        from: _earliest.subtract(const Duration(days: 1)),
+        to: _latest.add(const Duration(days: 1)),
+      )).toSet();
+    } catch (_) {
+      blocked = {}; // the date is checked again at checkout
+    }
+    return _DetailsData(item, blocked);
   }
 
-  void _retryLoading() {
-    setState(_loadItem);
+  /// Reserve Now (or tapping a free date on the calendar).
+  Future<void> _reserve(_DetailsData data, {DateTime? date}) async {
+    // Guests sign in first and come back to this item.
+    if (!SessionController.instance.isSignedIn) {
+      final here = GoRouterState.of(context).uri.toString();
+      // push (not go), so Back from Login returns to this item without
+      // reserving (H3). The reason makes Login say why (H2).
+      context.pushNamed(
+        RouteNames.login,
+        queryParameters: {
+          'from': here,
+          LoginReasons.param: LoginReasons.reserve,
+        },
+      );
+      return;
+    }
+    final chosen = await showReserveDateSheet(
+      context,
+      item: data.item,
+      blockedDays: data.blockedDays,
+      earliest: _earliest,
+      latest: _latest,
+      initial: date,
+    );
+    if (chosen == null || !mounted) return;
+    // Checkout route of the reservation feature (by path, no import).
+    context.push(
+      '${RoutePaths.reservePrefix}/${data.item.id}/checkout'
+      '?date=${Formatters.isoDate(chosen)}',
+    );
   }
 
   @override
-
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text('Item Details'),
-    ),
-    body: FutureBuilder<Item>(
-      future: _itemFuture,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<_DetailsData>(
+      future: _future,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
-
-        if (snapshot.hasError || !snapshot.hasData) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48),
-                  const SizedBox(height: 12),
-                  const Text('Unable to load item details.'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _retryLoading,
-                    child: const Text('Try Again'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        return _buildItemDetails(snapshot.data!);
-      },
-    ),
-    bottomNavigationBar: FutureBuilder<Item>(
-      future: _itemFuture,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.hasError) {
-          return const SizedBox.shrink();
-        }
-
-        final item = snapshot.data!;
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: () {
-                  context.pushNamed(
-                    RouteNames.reserveDates,
-                    pathParameters: {'itemId': item.id},
-                  );
-                },
-                child: const Text(
-                  'Reserve This Item',
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-            ),
+        final data = snapshot.data;
+        return Scaffold(
+          backgroundColor: theme.colorScheme.surfaceContainerLow,
+          // Customer redesign 2: shared header (H4) with the favorites heart.
+          appBar: BrandAppBar(
+            title: 'Item details',
+            actions: [
+              FavoriteButton(itemId: widget.itemId, itemName: data?.item.name),
+              const SizedBox(width: 4),
+            ],
           ),
+          body: switch (snapshot.connectionState) {
+            ConnectionState.done when snapshot.hasError => ErrorView(
+              message: friendlyErrorMessage(
+                snapshot.error!,
+                fallback:
+                    'This item could not be loaded. It may no longer be '
+                    'available.',
+              ),
+              onRetry: () => setState(() => _future = _load()),
+            ),
+            ConnectionState.done => _details(data!, theme),
+            _ => const LoadingView(message: 'Loading item...'),
+          },
+          // Sticky Ask / Reserve Now bar once the item is loaded.
+          bottomNavigationBar: data == null
+              ? null
+              : StickyActionBar(
+                  leading: OutlinedButton.icon(
+                    onPressed: () => context.go(RoutePaths.assistant),
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Ask'),
+                  ),
+                  action: FilledButton(
+                    onPressed: () => _reserve(data),
+                    child: const Text('Reserve Now'),
+                  ),
+                ),
         );
       },
-    ),
-  );
-}
-
-Widget _buildItemDetails(Item item) {
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildPhotos(item),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${item.type.label} • ${item.ageGroup.label}',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Rental price
-                const Text(
-                  'Rental Price',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '₱${item.price.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const Divider(height: 32),
-
-                // Item information
-                const Text(
-                  'Item Information',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildInfoRow('Size', item.size.isEmpty ? 'Not specified' : item.size),
-                _buildInfoRow('Type', item.type.label),
-                _buildInfoRow('Age Group', item.ageGroup.label),
-                _buildInfoRow('Condition', item.condition.label),
-
-                const Divider(height: 32),
-
-                // Description
-                const Text(
-                  'Description',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item.description.isEmpty
-                      ? 'No description available.'
-                      : item.description,
-                  style: const TextStyle(fontSize: 15, height: 1.5),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Inclusions
-                const Text(
-                  'What\'s Included',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (item.inclusions.isEmpty)
-                  const Text('No inclusions listed.')
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: item.inclusions.map((inclusion) {
-                      return Chip(
-                        label: Text(inclusion),
-                        avatar: const Icon(
-                          Icons.check_circle_outline,
-                          size: 18,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildPhotos(Item item) {
-    if (item.photoUrls.isEmpty) {
-      return Container(
-        height: 280,
-        width: double.infinity,
-        color: Colors.grey.shade200,
-        child: const Icon(
-          Icons.image_not_supported_outlined,
-          size: 64,
-          color: Colors.grey,
+  Widget _details(_DetailsData data, ThemeData theme) {
+    final item = data.item;
+    return ListView(
+      children: [
+        PhotoCarousel(urls: item.photoUrls, label: item.name),
+        const SizedBox(height: 8),
+
+        // Price and name.
+        SectionCard(
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                Formatters.peso(item.price),
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: AppColors.maroon,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                'for the 3-day rental (pick-up, event, return)',
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              Text(item.name, style: theme.textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Text(
+                '${item.type.label} · ${item.ageGroup.label}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
-      );
-    }
 
-    return SizedBox(
-      height: 280,
-      width: double.infinity,
-      child: PageView.builder(
-        itemCount: item.photoUrls.length,
-        itemBuilder: (context, index) {
-          return Image.network(
-            item.photoUrls[index],
-            fit: BoxFit.cover,
-            width: double.infinity,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: Colors.grey.shade200,
-                child: const Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    size: 64,
-                    color: Colors.grey,
-                  ),
+        // Size (each item is one size; shown as a chip like a variation).
+        SectionCard(
+          title: 'Size',
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: Wrap(
+            children: [
+              Chip(
+                label: Text(item.size.isEmpty ? 'One size' : item.size),
+                side: const BorderSide(color: AppColors.maroon, width: 1.5),
+                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+
+        SectionCard(
+          title: 'Inclusions (free accessories)',
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: item.inclusions.isEmpty
+              ? const Text('No accessories are included with this item.')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final inclusion in item.inclusions)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle,
+                              size: 20,
+                              color: AppColors.success,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(inclusion)),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Accessories come free with the item. Damaged '
+                      'accessories will be charged.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
+        ),
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(color: Colors.grey.shade700),
+        if (item.description.isNotEmpty)
+          SectionCard(
+            title: 'Description',
+            margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Text(item.description),
           ),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+
+        SectionCard(
+          title: 'Availability',
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Tap a free date to reserve it as your event date.'),
+              const SizedBox(height: 8),
+              AvailabilityCalendar(
+                blockedDays: data.blockedDays,
+                earliest: _earliest,
+                latest: _latest,
+                onSelect: (date) => _reserve(data, date: date),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -1,3 +1,8 @@
+// A customer data deletion request (table data_deletion_requests,
+// migration 0007), shown on the Privacy and data page.
+//
+// OWNER: Member 2.
+
 /// A customer's request for shop staff to review account-data deletion.
 class DataDeletionRequest {
   const DataDeletionRequest({

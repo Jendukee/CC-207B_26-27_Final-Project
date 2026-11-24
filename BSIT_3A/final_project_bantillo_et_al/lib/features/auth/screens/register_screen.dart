@@ -5,6 +5,9 @@
 // (Data Privacy Act of 2012 / RA 10173). The consent time is saved to
 // profiles.privacy_consent_at by the handle_new_user() trigger.
 //
+// Customer redesign 2 (Phase 1): BrandAppBar with a back arrow
+// (BackOrHomeButton) and "Continue browsing as guest" (H3, H4).
+//
 // OWNER: team lead.
 
 import 'package:flutter/material.dart';
@@ -14,6 +17,9 @@ import 'package:orange150_rental/core/router/auth_guard.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/back_or_home_button.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
+import 'package:orange150_rental/core/widgets/phone_form_field.dart';
 import 'package:orange150_rental/features/auth/services/auth_service.dart';
 
 /// Customer registration form.
@@ -35,7 +41,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
-  final _authService = AuthService();
+  // Created on first use, so the screen builds in tests without Supabase.
+  late final _authService = AuthService();
 
   bool _consent = false;
   bool _busy = false;
@@ -72,9 +79,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       if (result == RegisterResult.needsEmailConfirmation) {
         await _showConfirmEmailDialog();
-        router.goNamed(RouteNames.login, queryParameters: {
-          if (widget.from != null) 'from': widget.from!,
-        });
+        router.goNamed(
+          RouteNames.login,
+          queryParameters: {if (widget.from != null) 'from': widget.from!},
+        );
       } else {
         router.go(AuthGuard.safeFrom(widget.from) ?? RoutePaths.customerHome);
       }
@@ -136,7 +144,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
+      // Customer redesign 2: shared header (H4) with a back arrow that goes
+      // to the previous screen, or to Browse when opened directly (H3).
+      appBar: const BrandAppBar(
+        title: 'Create account',
+        leading: BackOrHomeButton(),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -149,9 +162,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _nameController,
                       decoration: const InputDecoration(
-                        labelText: 'Full name',
+                        labelText: 'Full name *',
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                       textCapitalization: TextCapitalization.words,
@@ -162,9 +177,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _emailController,
                       decoration: const InputDecoration(
-                        labelText: 'Email',
+                        labelText: 'Email *',
                         prefixIcon: Icon(Icons.email_outlined),
                       ),
                       keyboardType: TextInputType.emailAddress,
@@ -173,34 +190,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       validator: Validators.email,
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
+                    // UI audit #2: the shared phone field (digits only,
+                    // 11 max, 09XXXXXXXXX) instead of a free text field.
+                    PhoneFormField(
                       controller: _phoneController,
-                      decoration: const InputDecoration(
-                        labelText: 'Mobile number (optional)',
-                        hintText: '09XXXXXXXXX',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                      ),
-                      keyboardType: TextInputType.phone,
-                      autofillHints: const [AutofillHints.telephoneNumber],
-                      textInputAction: TextInputAction.next,
-                      validator: (v) => Validators.phone(v, isRequired: false),
+                      enabled: !_busy,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _passwordController,
                       decoration: InputDecoration(
-                        labelText: 'Password',
+                        labelText: 'Password *',
                         helperText: 'At least 8 characters',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
                               ? 'Show password'
                               : 'Hide password',
-                          icon: Icon(_obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                       obscureText: _obscurePassword,
@@ -210,13 +226,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      // UI audit #26: errors show once the user has touched the field.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       controller: _confirmController,
                       decoration: const InputDecoration(
-                        labelText: 'Confirm password',
+                        labelText: 'Confirm password *',
                         prefixIcon: Icon(Icons.lock_outline),
                       ),
                       obscureText: _obscurePassword,
                       textInputAction: TextInputAction.done,
+                      // The last field submits the form (UI audit #26).
+                      onFieldSubmitted: (_) => _submit(),
                       validator: (v) => v != _passwordController.text
                           ? 'Passwords do not match.'
                           : null,
@@ -231,13 +251,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          const Icon(Icons.error_outline,
-                              color: AppColors.deepRed),
+                          const Icon(
+                            Icons.error_outline,
+                            color: AppColors.deepRed,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(_errorMessage!,
-                                style:
-                                    const TextStyle(color: AppColors.deepRed)),
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: AppColors.deepRed),
+                            ),
                           ),
                         ],
                       ),
@@ -261,6 +284,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       child: const Text('Already have an account? Sign in'),
+                    ),
+                    // Customer redesign 2: leave without an account (H3).
+                    TextButton(
+                      onPressed: () => context.go(RoutePaths.browse),
+                      child: const Text('Continue browsing as guest'),
                     ),
                   ],
                 ),

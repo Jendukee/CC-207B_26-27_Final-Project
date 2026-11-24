@@ -1,10 +1,15 @@
-// Customer profile, measurements, privacy consent and deletion requests.
+// Customer profile, measurements, privacy consent, deletion requests and
+// booking counts for the Me page.
+//
+// OWNER: Member 2.
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:orange150_rental/core/services/supabase_service.dart';
 import 'package:orange150_rental/features/profile/models/data_deletion_request.dart';
 import 'package:orange150_rental/features/profile/models/profile_data.dart';
+import 'package:orange150_rental/shared/models/booking.dart';
+import 'package:orange150_rental/shared/models/customer_booking_tab.dart';
 
 /// Reads and updates the signed-in customer's own profile data.
 class ProfileService {
@@ -18,7 +23,7 @@ class ProfileService {
     final user = _requireUser();
     final profile = await _client
         .from('profiles')
-        .select('id, full_name, phone, privacy_consent_at')
+        .select('id, full_name, phone, address, privacy_consent_at')
         .eq('id', user.id)
         .single();
     final measurements = await _client
@@ -35,17 +40,30 @@ class ProfileService {
     );
   }
 
-  /// Updates full name and phone in profiles.
-  Future<void> updateContact({required String fullName, String? phone}) async {
+  /// How many of the customer's bookings are in each My Bookings tab, for
+  /// the shortcut icons on the Me page (customer redesign). RLS returns
+  /// only the customer's own bookings.
+  Future<Map<CustomerBookingTab, int>> bookingCounts() async {
+    _requireUser();
+    final rows = await _client.from('bookings').select();
+    return CustomerBookingTab.countAll(rows.map(Booking.fromMap));
+  }
+
+  /// Updates full name, phone and the optional address in profiles.
+  Future<void> updateContact({
+    required String fullName,
+    String? phone,
+    String? address,
+  }) async {
     final user = _requireUser();
-    final cleanedPhone = phone?.trim();
+    String? orNull(String? value) =>
+        (value ?? '').trim().isEmpty ? null : value!.trim();
     await _client
         .from('profiles')
         .update({
           'full_name': fullName.trim(),
-          'phone': cleanedPhone == null || cleanedPhone.isEmpty
-              ? null
-              : cleanedPhone,
+          'phone': orNull(phone),
+          'address': orNull(address), // column added in 0011
         })
         .eq('id', user.id)
         .select('id')

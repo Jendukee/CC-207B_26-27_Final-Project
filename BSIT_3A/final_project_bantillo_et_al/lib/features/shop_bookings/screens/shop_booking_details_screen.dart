@@ -11,6 +11,21 @@
 // Used two ways: as a full page (/shop/bookings/:bookingId) and, with
 // embedded: true, as the side panel of the bookings list on wide screens.
 //
+// Customer redesign 2 (Phase 1), same layout as the customer details:
+//   * the header shows only "Booking Details" and the reference number
+//   * "Booking status" is the FIRST card (shared BookingStatusCard): status
+//     chip, status in words, what to do next, the payment deadline, the
+//     timeline (Requested, Reserved, Picked up, Returned) and ONE primary
+//     action for the next step (Record payment / Mark picked up / Mark
+//     returned). The Actions card keeps only the other actions (H1, H2, H8).
+//   No rule changed: the same BookingRules decide which actions exist.
+//
+// Shop-side redesign (Phase 2): grey page, cards in the customer details
+// order (status, customer, item, schedule, payment, signed agreement,
+// measurements), and the actions in a StickyActionBar: one filled button
+// for the next step, the others outlined, Cancel red with a confirmation
+// (H4, H5, H7, H8). The next-step button left the status card.
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -19,12 +34,16 @@ import 'package:go_router/go_router.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/agreement_document.dart';
+import 'package:orange150_rental/core/widgets/booking_status_card.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
-import 'package:orange150_rental/core/widgets/status_chip.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/shop_bookings/models/booking_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/payment_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/shop_booking.dart';
+import 'package:orange150_rental/features/shop_bookings/models/staff_status_text.dart';
 import 'package:orange150_rental/features/shop_bookings/services/shop_bookings_service.dart';
 import 'package:orange150_rental/features/shop_bookings/widgets/detail_section.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
@@ -172,12 +191,33 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final body = _buildBody();
-    if (widget.embedded) return body;
+    final booking = _booking;
+    // Shop-side redesign: the actions in a sticky bottom bar (once loaded).
+    final bar = booking == null || _error != null
+        ? null
+        : _actionBar(booking.booking);
+    final background = Theme.of(context).colorScheme.surfaceContainerLow;
+    if (widget.embedded) {
+      // Side panel: no Scaffold, so the bar goes under the scrolling body.
+      return ColoredBox(
+        color: background,
+        child: Column(
+          children: [
+            Expanded(child: body),
+            ?bar,
+          ],
+        ),
+      );
+    }
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_booking?.booking.referenceNo ?? 'Booking Details'),
+      backgroundColor: background,
+      // Customer redesign 2: shared header with the Orange 150 mark (H4):
+      // only the title and the reference number.
+      appBar: BrandAppBar(
+        titleWidget: _HeaderTitle(reference: _booking?.booking.referenceNo),
       ),
       body: body,
+      bottomNavigationBar: bar,
     );
   }
 
@@ -201,17 +241,21 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
               constraints.maxWidth >=
               ShopBookingDetailsScreen.twoColumnBreakpoint;
 
+          // Shop-side redesign: the customer details order, i.e. status,
+          // customer, item, schedule, payment, signed agreement (then the
+          // measurements staff need at fitting). The actions are in the
+          // sticky bar, not in a card.
           final left = [
-            _header(booking),
+            _statusCard(booking),
             _customerSection(booking),
-            _measurementsSection(booking.booking),
             _itemsSection(booking),
-            _contractSection(booking.booking),
+            _scheduleSection(booking.booking),
           ];
           final right = [
-            _actionsSection(booking.booking),
             _paymentSection(booking.booking),
             _historySection(booking),
+            _contractSection(booking.booking),
+            _measurementsSection(booking.booking),
           ];
 
           return SingleChildScrollView(
@@ -226,65 +270,113 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
                       Expanded(child: Column(children: right)),
                     ],
                   )
-                // Phones: actions right after the header.
-                : Column(children: [left.first, ...right, ...left.skip(1)]),
+                : Column(children: [...left, ...right]),
           );
         },
       ),
     );
   }
 
-  /// Reference, status chip and the expired notice.
-  Widget _header(ShopBooking booking) {
+  /// Customer redesign 2: the "Booking status" card (it replaces the old
+  /// header with the reference, status chip, requested date and expired
+  /// notice; the requested date is now the first timeline step and the
+  /// expired text is the next step).
+  Widget _statusCard(ShopBooking booking) {
     final row = booking.booking;
     final status = BookingRules.effectiveStatus(row);
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(row.referenceNo, style: theme.textTheme.titleLarge),
-              ),
-              StatusChip.booking(status),
-            ],
-          ),
-          if (row.createdAt != null)
-            Text(
-              'Requested ${Formatters.dateTime(row.createdAt!)}',
-              style: theme.textTheme.bodySmall,
-            ),
-          if (BookingRules.isPastExpiry(row))
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: NoticeBox(
-                icon: Icons.timer_off_outlined,
-                color: AppColors.neutralGrey,
-                text:
-                    'This request expired on '
-                    '${Formatters.dateTime(row.expiresAt!)} without payment.',
-              ),
-            ),
-        ],
-      ),
+    final card = BookingStatusCard(
+      status: status,
+      statusText: StaffStatusText.words(status),
+      nextStep: StaffStatusText.nextStep(row, status),
+      deadline: status == BookingStatus.pending ? row.expiresAt : null,
+      steps: booking.timeline,
+      // Shop-side redesign: the next-step button moved to the sticky bar
+      // with the other actions, so it is not shown twice (H8).
+      margin: const EdgeInsets.only(bottom: 12),
     );
+    if (!widget.embedded) return card; // the reference is in the header
+    // Side panel (no header): the reference above the card.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Ref ${row.referenceNo}',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        card,
+      ],
+    );
+  }
+
+  /// The ONE filled button for the next step, chosen with the same
+  /// BookingRules as before: a payment is owed first, then pick-up, then
+  /// return. Null when nothing is next.
+  Widget? _primaryAction(Booking booking) {
+    if (BookingRules.canRecordPayment(booking)) {
+      return FilledButton.icon(
+        onPressed: _busy ? null : _recordPayment,
+        icon: const Icon(Icons.add_card),
+        label: Text(
+          booking.status == BookingStatus.pending
+              ? 'Record payment to reserve'
+              : 'Record balance payment',
+        ),
+      );
+    }
+    if (BookingRules.canMarkPickedUp(booking)) {
+      return FilledButton.icon(
+        onPressed: _busy ? null : _markPickedUp,
+        icon: const Icon(Icons.outbox_outlined),
+        label: const Text('Mark picked up'),
+      );
+    }
+    if (BookingRules.canMarkReturned(booking)) {
+      return FilledButton.icon(
+        onPressed: _busy ? null : _markReturned,
+        icon: const Icon(Icons.assignment_return_outlined),
+        label: const Text('Mark returned'),
+      );
+    }
+    return null;
   }
 
   /// Customer name and mobile number.
   Widget _customerSection(ShopBooking booking) {
     final phone = booking.customerPhone ?? '';
+    final row = booking.booking;
     return DetailSection(
       title: 'Customer',
       icon: Icons.person_outline,
       children: [
         DetailRow(label: 'Name', value: booking.customerName),
+        // The name given at checkout (0012); the signature is checked
+        // against it, and it can differ from the account name.
+        if ((row.customerFullName ?? '').isNotEmpty)
+          DetailRow(label: 'Name on booking', value: row.customerFullName!),
         DetailRow(
           label: 'Mobile',
           value: phone.isEmpty ? 'Not provided' : phone,
         ),
+        // E-contract details given at checkout (Phase 2), when present.
+        if ((row.facebookAccount ?? '').isNotEmpty)
+          DetailRow(label: 'Facebook', value: row.facebookAccount!),
+        if ((row.customerAddress ?? '').isNotEmpty)
+          DetailRow(label: 'Address', value: row.customerAddress!),
+        if (row.preferredPaymentMethod != null)
+          DetailRow(
+            label: 'Will pay by',
+            value: PaymentMethod.labelFor(row.preferredPaymentMethod!),
+          ),
+        if (row.preferredFittingDate != null)
+          DetailRow(
+            label: 'Fitting date',
+            value: Formatters.date(row.preferredFittingDate!),
+          ),
+        if ((row.notes ?? '').isNotEmpty)
+          DetailRow(label: 'Note', value: row.notes!),
       ],
     );
   }
@@ -319,11 +411,11 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
     );
   }
 
-  /// Items and rental dates.
+  /// The booked items (shop-side redesign: its own "Item" card, as on the
+  /// customer details).
   Widget _itemsSection(ShopBooking booking) {
-    final row = booking.booking;
     return DetailSection(
-      title: 'Items and dates',
+      title: 'Item',
       icon: Icons.checkroom_outlined,
       children: [
         if (booking.items.isEmpty) const Text('No items on this booking.'),
@@ -332,7 +424,17 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
             label: '${item.name} (${item.type.label}, size ${item.size})',
             value: Formatters.peso(item.price),
           ),
-        const Divider(),
+      ],
+    );
+  }
+
+  /// Pick-up, event and return dates ("Rental schedule", as on the
+  /// customer details).
+  Widget _scheduleSection(Booking row) {
+    return DetailSection(
+      title: 'Rental schedule',
+      icon: Icons.event_outlined,
+      children: [
         DetailRow(label: 'Pick-up', value: Formatters.date(row.pickupDate)),
         DetailRow(label: 'Event', value: Formatters.date(row.eventDate)),
         DetailRow(label: 'Return', value: Formatters.date(row.returnDate)),
@@ -348,7 +450,17 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
       title: 'E-contract',
       icon: Icons.assignment_turned_in_outlined,
       children: [
-        if (acknowledgedAt != null)
+        // Phase 2: bookings signed with a typed name.
+        if (booking.isSigned)
+          NoticeBox(
+            icon: Icons.verified_outlined,
+            color: AppColors.success,
+            text:
+                'Customer signed as ${booking.signedName}'
+                '${acknowledgedAt == null ? '' : ' on ${Formatters.dateTime(acknowledgedAt)}'}'
+                '${version == null ? '' : ' (terms version $version)'}.',
+          )
+        else if (acknowledgedAt != null)
           NoticeBox(
             icon: Icons.verified_outlined,
             color: AppColors.success,
@@ -364,6 +476,22 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
             text:
                 'The customer has NOT acknowledged the rental terms. '
                 'Ask them to accept the terms before releasing the items.',
+          ),
+        if (booking.termsSnapshot != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => showSignedAgreement(
+                context,
+                snapshot: booking.termsSnapshot!,
+                signedName: booking.signedName ?? '',
+                signedAt: acknowledgedAt,
+                version: version,
+                customerFullName: booking.customerFullName,
+              ),
+              icon: const Icon(Icons.description_outlined),
+              label: const Text('View signed agreement'),
+            ),
           ),
       ],
     );
@@ -420,64 +548,96 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
     );
   }
 
-  /// Buttons for the transitions allowed right now.
-  Widget _actionsSection(Booking booking) {
-    final status = BookingRules.effectiveStatus(booking);
-    final buttons = <Widget>[
-      if (BookingRules.canRecordPayment(booking))
-        FilledButton.icon(
-          onPressed: _busy ? null : _recordPayment,
-          icon: const Icon(Icons.add_card),
-          label: Text(
-            booking.status == BookingStatus.pending
-                ? 'Record payment to reserve'
-                : 'Record balance payment',
-          ),
-        ),
-      if (BookingRules.canMarkPickedUp(booking))
-        FilledButton.icon(
+  /// Shop-side redesign (Phase 2): the staff actions in a sticky bottom
+  /// bar, always reachable (H7): ONE filled button for the next step
+  /// (_primaryAction, same BookingRules as before), and the other actions
+  /// as outlined buttons above it; Cancel is red and still asks first (H5).
+  /// Null when no action is allowed (returned, cancelled, expired).
+  Widget? _actionBar(Booking booking) {
+    final primary = _primaryAction(booking);
+    final secondary = <Widget>[
+      // UI audit #31: only ONE filled button. While a balance is owed,
+      // "Record balance payment" is primary and this one is outlined.
+      if (BookingRules.canMarkPickedUp(booking) &&
+          BookingRules.canRecordPayment(booking))
+        OutlinedButton(
           onPressed: _busy ? null : _markPickedUp,
-          icon: const Icon(Icons.outbox_outlined),
-          label: const Text('Mark picked up'),
-        ),
-      if (BookingRules.canMarkReturned(booking))
-        FilledButton.icon(
-          onPressed: _busy ? null : _markReturned,
-          icon: const Icon(Icons.assignment_return_outlined),
-          label: const Text('Mark returned'),
+          child: const Text('Mark picked up'),
         ),
       if (BookingRules.canCancel(booking))
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(foregroundColor: AppColors.deepRed),
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.deepRed,
+            side: const BorderSide(color: AppColors.deepRed),
+          ),
           onPressed: _busy ? null : () => _cancel(booking),
-          icon: _busy
+          child: _busy
               ? const SizedBox.square(
                   dimension: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.cancel_outlined),
-          label: const Text('Cancel booking'),
+              : const Text('Cancel booking'),
         ),
     ];
+    if (primary == null && secondary.isEmpty) return null;
 
-    return DetailSection(
-      title: 'Actions',
-      icon: Icons.bolt_outlined,
+    return StickyActionBar(
+      // Why the items cannot be released yet (H1, H9).
+      message: BookingRules.canMarkPickedUp(booking) && booking.balance > 0
+          ? 'Collect the ${Formatters.peso(booking.balance)} balance before '
+                'releasing the items.'
+          : null,
+      // Balance on the left, like Record payment and the checklists.
+      leading: _balanceSummary(booking),
+      // With no next step, the last other action takes the main place.
+      secondary: primary == null
+          ? secondary.sublist(0, secondary.length - 1)
+          : secondary,
+      action: primary ?? secondary.last,
+    );
+  }
+
+  /// "Balance ₱875.00" (or "Fully paid") for the bar's left side.
+  Widget _balanceSummary(Booking booking) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (buttons.isEmpty)
-          Text('No actions available for ${status.label} bookings.'),
-        if (BookingRules.canMarkPickedUp(booking) && booking.balance > 0)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: NoticeBox(
-              icon: Icons.info_outline,
-              color: AppColors.warningOrange,
-              text:
-                  'Balance of ${Formatters.peso(booking.balance)} must be '
-                  'paid before the items can be released.',
-            ),
+        Text('Balance', style: theme.textTheme.bodySmall),
+        Text(
+          booking.balance > 0 ? Formatters.peso(booking.balance) : 'Paid',
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: booking.balance > 0 ? AppColors.deepRed : AppColors.success,
+            fontWeight: FontWeight.bold,
           ),
-        Wrap(spacing: 8, runSpacing: 8, children: buttons),
+        ),
+      ],
+    );
+  }
+}
+
+/// Header title: "Booking Details" and, once loaded, "Ref O150-..."
+/// (customer redesign 2: the status itself is in the status card).
+class _HeaderTitle extends StatelessWidget {
+  const _HeaderTitle({this.reference});
+
+  final String? reference;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Booking Details', maxLines: 1),
+        if (reference != null)
+          Text(
+            'Ref $reference',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
+          ),
       ],
     );
   }

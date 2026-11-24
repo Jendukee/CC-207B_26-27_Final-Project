@@ -1,8 +1,34 @@
+// Staff form to add or edit a rentable item (name, type, age group, size,
+// price, condition, description, inclusions, photos).
+//
+// UI audit changes: a failed save keeps the form (#11); after the first
+// successful insert the form switches to edit mode, so pressing Save again
+// after an error updates the item instead of creating a duplicate; type and
+// age group use SegmentedButtons (#21); the price accepts numbers only
+// (#16); retiring an item asks for confirmation (#18); live validation
+// (#26), FilledButton (#27), shared Loading/Error views (#28), inclusions
+// as chips and a discard-changes warning (#40).
+//
+// Shop-side redesign (Phase 2): the fields in white section cards on a grey
+// page, and a sticky bar with the price on the left and Save on the right.
+// The separate Cancel button was dropped: Back does the same and still
+// asks before discarding changes (H3, H8).
+//
+// OWNER: Member 1.
 
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
+import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
 
@@ -27,7 +53,16 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   final _sizeController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
+
+  /// Text box for typing ONE new inclusion (added as a chip, UI audit #40).
   final _inclusionsController = TextEditingController();
+
+  /// The item's inclusions, shown as chips with a remove button.
+  final List<String> _inclusions = [];
+
+  /// True once anything was changed; Back then asks before discarding
+  /// (UI audit #40).
+  bool _dirty = false;
 
   ItemType _type = ItemType.gown;
   AgeGroup _ageGroup = AgeGroup.adult;
@@ -38,6 +73,22 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
   bool _isLoading = false;
   bool _isSaving = false;
+
+  /// Id of the item being edited. Starts as widget.itemId (null for a new
+  /// item) and is set after the first successful insert (duplicate fix).
+  late String? _itemId = widget.itemId;
+
+  /// True once the item exists in the database: Save then updates it.
+  bool get _isEditing => _itemId != null;
+
+  /// Condition when the form opened, to know if staff are retiring it.
+  ItemCondition _originalCondition = ItemCondition.available;
+
+  /// UI audit #11: two separate errors.
+  /// [_loadError]: the item could not be loaded (full-screen error + Retry).
+  /// [_errorMessage]: saving failed (shown above the Save button; the form
+  /// and everything the user typed stay on screen).
+  String? _loadError;
   String? _errorMessage;
 
   @override
@@ -62,14 +113,12 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
   Future<void> _loadItem() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _loadError = null;
     });
 
     try {
       final items = await _service.listItems(includeRetired: true);
-      final item = items.firstWhere(
-        (item) => item.id == widget.itemId,
-      );
+      final item = items.firstWhere((item) => item.id == widget.itemId);
 
       if (!mounted) return;
 
@@ -78,11 +127,14 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         _sizeController.text = item.size;
         _priceController.text = item.price.toString();
         _descriptionController.text = item.description;
-        _inclusionsController.text = item.inclusions.join(', ');
+        _inclusions
+          ..clear()
+          ..addAll(item.inclusions);
 
         _type = item.type;
         _ageGroup = item.ageGroup;
         _condition = item.condition;
+        _originalCondition = item.condition;
         _existingPhotoUrls = List<String>.from(item.photoUrls);
 
         _isLoading = false;
@@ -91,7 +143,10 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = e.toString();
+        _loadError = friendlyErrorMessage(
+          e,
+          fallback: 'Could not load this item. Please try again.',
+        );
         _isLoading = false;
       });
     }
@@ -105,12 +160,21 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
       setState(() {
         _newPhotos.addAll(photos);
+        _dirty = true;
       });
     } catch (e) {
       if (!mounted) return;
 
+      // UI audit #12: no raw exception text.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to select photos: $e')),
+        SnackBar(
+          content: Text(
+            friendlyErrorMessage(
+              e,
+              fallback: 'Could not open your photos. Please try again.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -127,25 +191,103 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     });
   }
 
+  /// Adds the typed inclusion as a chip (ignores blanks and duplicates).
+  void _addInclusion() {
+    final value = _inclusionsController.text.trim();
+    if (value.isEmpty) return;
+    setState(() {
+      final exists = _inclusions.any(
+        (i) => i.toLowerCase() == value.toLowerCase(),
+      );
+      if (!exists) _inclusions.add(value);
+      _inclusionsController.clear();
+      _dirty = true;
+    });
+  }
+
+  /// The inclusions to save, including text typed but not yet added.
   List<String> _parseInclusions() {
-    return _inclusionsController.text
-        .split(',')
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toList();
+    final pending = _inclusionsController.text.trim();
+    return [
+      ..._inclusions,
+      if (pending.isNotEmpty &&
+          !_inclusions.any((i) => i.toLowerCase() == pending.toLowerCase()))
+        pending,
+    ];
+  }
+
+  /// Back with unsaved changes: ask before throwing them away.
+  Future<void> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('Your changes to this item have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.deepRed),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      _dirty = false;
+      Navigator.of(context).pop();
+    }
+  }
+
+  /// UI audit #18: asks before retiring, because a retired item leaves the
+  /// catalog. Returns true when it is OK to save.
+  Future<bool> _confirmRetireIfNeeded() async {
+    final retiring =
+        _condition == ItemCondition.retired &&
+        _originalCondition != ItemCondition.retired;
+    if (!retiring) return true;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Retire this item?'),
+        content: const Text(
+          'Retired items are hidden from the catalog and cannot be '
+          'reserved. You can bring it back later by changing its condition.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.deepRed),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Retire item'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 
   Future<void> _saveItem() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!await _confirmRetireIfNeeded() || !mounted) return;
 
     setState(() {
       _isSaving = true;
       _errorMessage = null;
     });
 
+    // Was this a brand-new item when Save was pressed? (for the message)
+    final wasNew = !_isEditing;
+
     try {
       final item = Item(
-        id: widget.itemId ?? '',
+        id: _itemId ?? '',
         name: _nameController.text.trim(),
         type: _type,
         ageGroup: _ageGroup,
@@ -159,15 +301,19 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
 
       Item savedItem;
 
-      if (widget.isEditing) {
+      if (_isEditing) {
         savedItem = await _service.updateItem(item);
       } else {
         savedItem = await _service.createItem(item);
+        // Duplicate fix: remember the new id right away. If a later step
+        // (photo upload) fails and staff press Save again, the form is now
+        // in edit mode and UPDATES this item instead of inserting a copy.
+        _itemId = savedItem.id;
       }
 
-      final uploadedUrls = <String>[];
-
-      for (final photo in _newPhotos) {
+      // Upload new photos one by one. Each uploaded photo moves to
+      // _existingPhotoUrls at once, so a retry never uploads it twice.
+      for (final photo in List<XFile>.of(_newPhotos)) {
         final Uint8List bytes = await photo.readAsBytes();
 
         final url = await _service.uploadPhoto(
@@ -176,45 +322,52 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
           fileName: photo.name,
         );
 
-        uploadedUrls.add(url);
+        _existingPhotoUrls.add(url);
+        _newPhotos.remove(photo);
       }
 
-      if (_newPhotos.isNotEmpty || widget.isEditing) {
-        final updatedItem = Item(
-          id: savedItem.id,
-          name: item.name,
-          type: item.type,
-          ageGroup: item.ageGroup,
-          size: item.size,
-          price: item.price,
-          description: item.description,
-          inclusions: item.inclusions,
-          photoUrls: [..._existingPhotoUrls, ...uploadedUrls],
-          condition: item.condition,
-          createdAt: savedItem.createdAt,
-        );
-
-        savedItem = await _service.updateItem(updatedItem);
-      }
+      // Save the final photo list.
+      final updatedItem = Item(
+        id: savedItem.id,
+        name: item.name,
+        type: item.type,
+        ageGroup: item.ageGroup,
+        size: item.size,
+        price: item.price,
+        description: item.description,
+        inclusions: item.inclusions,
+        photoUrls: List<String>.of(_existingPhotoUrls),
+        condition: item.condition,
+        createdAt: savedItem.createdAt,
+      );
+      savedItem = await _service.updateItem(updatedItem);
+      _originalCondition = savedItem.condition;
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            widget.isEditing
-                ? 'Item updated successfully!'
-                : 'Item added successfully!',
+            wasNew ? 'Item added successfully!' : 'Item updated successfully!',
           ),
         ),
       );
 
+      _dirty = false; // saved: leaving no longer needs a warning
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
 
+      // Shown above the Save button; the form keeps the user's edits.
+      // setState also refreshes the photo list and the title ("Edit
+      // Item" once a new item was saved).
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = friendlyErrorMessage(
+          e,
+          fallback:
+              'Could not save this item. Check your connection and '
+              'press Save again.',
+        );
       });
     } finally {
       if (mounted) {
@@ -257,10 +410,8 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
                       child: Image.network(
                         url,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.broken_image,
-                          size: 48,
-                        ),
+                        errorBuilder: (_, _, _) =>
+                            const Icon(Icons.broken_image, size: 48),
                       ),
                     ),
                     Positioned(
@@ -319,206 +470,322 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     );
   }
 
+  /// A label above a SegmentedButton with one segment per value.
+  Widget _segmentedField<T>({
+    required String label,
+    required List<T> values,
+    required String Function(T value) labelOf,
+    required T selected,
+    required ValueChanged<T> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        SegmentedButton<T>(
+          showSelectedIcon: false,
+          segments: [
+            for (final value in values)
+              ButtonSegment<T>(value: value, label: Text(labelOf(value))),
+          ],
+          selected: {selected},
+          onSelectionChanged: _isSaving
+              ? null
+              : (selection) => onChanged(selection.first),
+        ),
+      ],
+    );
+  }
+
+  /// Shop-side redesign (Phase 2): the same fields and validators as
+  /// before, grouped into white section cards on a light grey page
+  /// ("Item details", "Price and condition", "Description and inclusions",
+  /// "Photos"), like the customer checkout (H4, H8). Save is in the sticky
+  /// bottom bar (see _bottomBar); Back still asks before discarding.
   Widget _buildForm() {
+    const gap = EdgeInsets.only(bottom: 12);
     return Form(
       key: _formKey,
+      // Any typed change marks the form as changed (discard warning) and
+      // rebuilds, so the bottom bar's price follows the field (Phase 2).
+      onChanged: () => setState(() => _dirty = true),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         children: [
-          TextFormField(
-            controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: 'Item Name *',
-              hintText: 'e.g. Ivory Ball Gown',
-              border: OutlineInputBorder(),
+          SectionCard(
+            title: 'Item details',
+            icon: Icons.checkroom_outlined,
+            margin: gap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _nameController,
+                  // UI audit #26: errors show once the field was touched.
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(
+                    labelText: 'Item Name *',
+                    hintText: 'e.g. Ivory Ball Gown',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Item name is required.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                // UI audit #21: exactly one of two options -> SegmentedButton,
+                // so both choices are always visible (was a dropdown).
+                _segmentedField<ItemType>(
+                  label: 'Item Type *',
+                  values: ItemType.values,
+                  labelOf: (type) => type.label,
+                  selected: _type,
+                  onChanged: (type) => setState(() => _type = type),
+                ),
+                const SizedBox(height: 16),
+                _segmentedField<AgeGroup>(
+                  label: 'Age Group *',
+                  values: AgeGroup.values,
+                  labelOf: (group) => group.label,
+                  selected: _ageGroup,
+                  onChanged: (group) => setState(() => _ageGroup = group),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _sizeController,
+                  // UI audit #26: errors show once the field was touched.
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(
+                    labelText: 'Size *',
+                    hintText: 'e.g. S, M, L, 8-10',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Size is required.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
             ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Item name is required.';
-              }
-              return null;
-            },
           ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<ItemType>(
-            initialValue: _type,
-            decoration: const InputDecoration(
-              labelText: 'Item Type',
-              border: OutlineInputBorder(),
-            ),
-            items: ItemType.values.map((type) {
-              return DropdownMenuItem(
-                value: type,
-                child: Text(type.label),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _type = value;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<AgeGroup>(
-            initialValue: _ageGroup,
-            decoration: const InputDecoration(
-              labelText: 'Age Group',
-              border: OutlineInputBorder(),
-            ),
-            items: AgeGroup.values.map((group) {
-              return DropdownMenuItem(
-                value: group,
-                child: Text(group.label),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _ageGroup = value;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _sizeController,
-            decoration: const InputDecoration(
-              labelText: 'Size *',
-              hintText: 'e.g. S, M, L, 8-10',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Size is required.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _priceController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Rental Price (PHP) *',
-              prefixText: '₱ ',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Rental price is required.';
-              }
+          SectionCard(
+            title: 'Price and condition',
+            icon: Icons.sell_outlined,
+            margin: gap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _priceController,
+                  // UI audit #26: errors show once the field was touched.
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  // UI audit #16: digits and one decimal point (max 2 decimals).
+                  inputFormatters: Validators.moneyFormatters,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Rental Price (PHP) *',
+                    prefixText: '₱ ',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Rental price is required.';
+                    }
 
-              final price = double.tryParse(value.trim());
+                    final price = double.tryParse(value.trim());
 
-              if (price == null || price <= 0) {
-                return 'Enter a valid price greater than zero.';
-              }
+                    if (price == null || price <= 0) {
+                      return 'Enter a valid price greater than zero.';
+                    }
 
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<ItemCondition>(
-            initialValue: _condition,
-            decoration: const InputDecoration(
-              labelText: 'Physical Condition',
-              border: OutlineInputBorder(),
-            ),
-            items: ItemCondition.values.map((condition) {
-              return DropdownMenuItem(
-                value: condition,
-                child: Text(condition.label),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _condition = value;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _descriptionController,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Description',
-              hintText: 'Describe the item...',
-              border: OutlineInputBorder(),
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<ItemCondition>(
+                  initialValue: _condition,
+                  decoration: const InputDecoration(
+                    labelText: 'Physical Condition',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ItemCondition.values.map((condition) {
+                    return DropdownMenuItem(
+                      value: condition,
+                      child: Text(condition.label),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _condition = value;
+                      });
+                    }
+                  },
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _inclusionsController,
-            decoration: const InputDecoration(
-              labelText: 'Inclusions',
-              hintText: 'Veil, Petticoat, Necklace',
-              helperText: 'Separate inclusions with commas.',
-              border: OutlineInputBorder(),
+          SectionCard(
+            title: 'Description and inclusions',
+            icon: Icons.notes_outlined,
+            margin: gap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Describe the item...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // UI audit #40: inclusions as chips. Type one, press Add (or
+                // Enter); remove one with its x.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _inclusionsController,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _addInclusion(),
+                        decoration: const InputDecoration(
+                          labelText: 'Add an inclusion',
+                          hintText: 'e.g. Veil',
+                          helperText:
+                              'Free accessories that come with the item.',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 56,
+                      child: OutlinedButton(
+                        onPressed: _isSaving ? null : _addInclusion,
+                        child: const Text('Add'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_inclusions.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final inclusion in _inclusions)
+                        InputChip(
+                          label: Text(inclusion),
+                          onDeleted: _isSaving
+                              ? null
+                              : () => setState(() {
+                                  _inclusions.remove(inclusion);
+                                  _dirty = true;
+                                }),
+                          deleteButtonTooltipMessage: 'Remove $inclusion',
+                        ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 24),
-          _buildPhotoSection(),
-          const SizedBox(height: 24),
-          if (_errorMessage != null) ...[
-            Text(
-              _errorMessage!,
-              style: const TextStyle(color: Colors.red),
+          // The photo picker keeps its own "Item Photos" heading.
+          SectionCard(margin: gap, child: _buildPhotoSection()),
+          if (_errorMessage != null)
+            // A failed save keeps the form (UI audit #11).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.error_outline, color: AppColors.deepRed),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: AppColors.deepRed),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-          ],
-          SizedBox(
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _isSaving ? null : _saveItem,
-              child: _isSaving
-                  ? const CircularProgressIndicator()
-                  : Text(widget.isEditing ? 'Save Changes' : 'Add Item'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  /// Sticky bar (Phase 2): the rental price on the left and the main
+  /// action on the right, like Record payment and the checkout (H1, H4).
+  /// UI audit #27: the app's primary button style (FilledButton).
+  Widget _bottomBar() {
+    final theme = Theme.of(context);
+    final price = double.tryParse(_priceController.text.trim());
+    return StickyActionBar(
+      leading: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Rental price', style: theme.textTheme.bodySmall),
+          Text(
+            price == null ? '₱ –' : Formatters.peso(price),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.maroon,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+      action: FilledButton(
+        onPressed: _isSaving ? null : _saveItem,
+        child: _isSaving
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(_isEditing ? 'Save Changes' : 'Add Item'),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Item' : 'Add Item'),
+    // UI audit #40: Back with unsaved changes asks first.
+    return PopScope(
+      canPop: !_dirty || _isSaving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
+        // Phase 2: light grey page under the white section cards (H4).
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+        // Customer redesign 2: shared header with the Orange 150 mark (H4).
+        appBar: BrandAppBar(title: _isEditing ? 'Edit Item' : 'Add Item'),
+        // Phase 2: Save in a sticky bar, only while the form is shown.
+        bottomNavigationBar: _isLoading || _loadError != null
+            ? null
+            : _bottomBar(),
+        // UI audit #28: the shared loading and error (Retry) views.
+        body: _isLoading
+            ? const LoadingView(message: 'Loading item...')
+            // Only a failed LOAD replaces the form; a failed save does not.
+            : _loadError != null
+            ? ErrorView(message: _loadError!, onRetry: _loadItem)
+            : _buildForm(),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null && widget.isEditing
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _errorMessage!,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadItem,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : _buildForm(),
     );
   }
 }

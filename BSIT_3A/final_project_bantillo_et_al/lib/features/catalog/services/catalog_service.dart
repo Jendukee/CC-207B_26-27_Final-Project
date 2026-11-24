@@ -34,9 +34,7 @@ class CatalogService {
     }
 
     if (filter.ageGroup != null) {
-      items = items
-          .where((item) => item.ageGroup == filter.ageGroup)
-          .toList();
+      items = items.where((item) => item.ageGroup == filter.ageGroup).toList();
     }
 
     if (filter.size != null && filter.size!.trim().isNotEmpty) {
@@ -46,6 +44,10 @@ class CatalogService {
                 item.size.toLowerCase() == filter.size!.trim().toLowerCase(),
           )
           .toList();
+    }
+
+    if (filter.minPrice != null) {
+      items = items.where((item) => item.price >= filter.minPrice!).toList();
     }
 
     if (filter.maxPrice != null) {
@@ -108,6 +110,43 @@ class CatalogService {
     return (result as List<dynamic>)
         .map((date) => _dateOnly(DateTime.parse(date.toString())))
         .toList();
+  }
+
+  /// For each item id, how many of the next [days] days are booked
+  /// (item_busy_days RPC, migration 0010). Items with no bookings are
+  /// missing from the map. Used for the "Few dates left" tag; if the call
+  /// fails the tags are simply not shown.
+  Future<Map<String, int>> busyDays({int days = 30}) async {
+    final today = _dateOnly(DateTime.now());
+    try {
+      final rows = await SupabaseService.client.rpc(
+        'item_busy_days',
+        params: {
+          'p_from': _dateString(today),
+          'p_to': _dateString(today.add(Duration(days: days))),
+        },
+      ) as List<dynamic>;
+      return {
+        for (final row in rows.cast<Map<String, dynamic>>())
+          row['item_id'] as String: (row['busy_days'] as num).toInt(),
+      };
+    } catch (_) {
+      return const {}; // tags are optional; never block Browse
+    }
+  }
+
+  /// Every size used by rentable items, sorted, for the size chips.
+  Future<List<String>> listSizes() async {
+    final rows = await SupabaseService.client
+        .from('items')
+        .select('size')
+        .eq('condition', ItemCondition.available.dbValue);
+    final sizes = {
+      for (final row in rows)
+        if ((row['size'] as String? ?? '').trim().isNotEmpty)
+          (row['size'] as String).trim(),
+    }.toList()..sort();
+    return sizes;
   }
 
   /// Removes the time portion from a date.

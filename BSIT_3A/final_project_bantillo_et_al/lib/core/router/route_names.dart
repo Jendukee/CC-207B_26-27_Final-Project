@@ -18,6 +18,8 @@ abstract final class RouteNames {
   // Customer shell (Member 1 + Member 2)
   static const String browse = 'browse';
   static const String itemDetails = 'itemDetails';
+  // Saved items (customer redesign 2, Member 1).
+  static const String favorites = 'favorites';
   static const String assistant = 'assistant';
   static const String myBookings = 'myBookings';
   static const String customerBookingDetails = 'customerBookingDetails';
@@ -25,8 +27,8 @@ abstract final class RouteNames {
 
   // Reservation flow, full screen (Member 2)
   static const String reserveDates = 'reserveDates';
-  static const String reserveMeasurements = 'reserveMeasurements';
-  static const String reserveReview = 'reserveReview';
+  // reserveMeasurements / reserveReview removed: their screens were deleted
+  // in Phase 2 (reserveDates stays for the redirect route).
   static const String bookingConfirmation = 'bookingConfirmation';
 
   // Staff shell (Member 1 + Member 3)
@@ -54,15 +56,17 @@ abstract final class RoutePaths {
 
   static const String browse = '/browse';
   static const String itemDetails = 'item/:itemId'; // child of browse
+  static const String favorites = 'favorites'; // child of browse
+
+  /// Full path of the Favorites screen, for context.push.
+  static const String favoritesFull = '/browse/favorites';
   static const String assistant = '/assistant';
   static const String myBookings = '/my-bookings';
   static const String customerBookingDetails = ':bookingId'; // child
   static const String profile = '/profile';
 
   static const String reservePrefix = '/reserve';
-  static const String reserveDates = '/reserve/:itemId/dates';
-  static const String reserveMeasurements = '/reserve/:itemId/measurements';
-  static const String reserveReview = '/reserve/:itemId/review';
+  static const String reserveDates = '/reserve/:itemId/dates'; // redirect only
   static const String bookingConfirmationPrefix = '/booking-confirmation';
   static const String bookingConfirmation = '/booking-confirmation/:bookingId';
 
@@ -93,4 +97,19 @@ abstract final class RoutePaths {
     myBookings,
     bookingConfirmationPrefix,
   ];
+}
+
+/// Query parameters understood by the Login screen (customer redesign 2).
+/// Any feature may send a guest to Login with one of these, so the screen
+/// can say why sign-in is needed (H2, H9):
+///   `/login?from=(where to return)&reason=favorites`
+abstract final class LoginReasons {
+  /// Query parameter name.
+  static const String param = 'reason';
+
+  /// A guest tapped a heart: "Sign in to save favorites".
+  static const String favorites = 'favorites';
+
+  /// A guest tapped Reserve Now: "Sign in to reserve this item".
+  static const String reserve = 'reserve';
 }

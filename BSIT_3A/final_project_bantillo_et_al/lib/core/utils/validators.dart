@@ -7,14 +7,66 @@
 //     (v) => Validators.numberRange(v, min: 15, max: 70, fieldName: 'Waist'),
 //   ]),
 //
+// Phone numbers (UI audit, finding #1): every mobile field in the app uses
+// the SAME rules from this file, usually through core/widgets/
+// phone_form_field.dart:
+//   * Validators.phone            exactly 11 digits starting with 09
+//   * Validators.phoneFormatters  digits only, at most 11
+//   * Validators.normalizePhone   cleans old values ("+63 917 ..." -> "0917...")
+// The database checks the same pattern (0008_profiles_phone_check.sql).
+//
 // OWNER: team lead. Change only via a reviewed PR.
+
+import 'package:flutter/services.dart';
 
 /// Reusable validation functions.
 abstract final class Validators {
   static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-  /// Philippine mobile: 09XXXXXXXXX or +639XXXXXXXXX.
-  static final RegExp _phPhonePattern = RegExp(r'^(09|\+639)\d{9}$');
+  /// Philippine mobile: exactly 11 digits starting with 09 (09XXXXXXXXX).
+  static final RegExp _phPhonePattern = RegExp(r'^09\d{9}$');
+
+  /// Error shown for an invalid mobile number.
+  static const String phoneFormatError =
+      'Enter an 11-digit mobile number starting with 09, '
+      'for example 09171234567.';
+
+  /// Helper text shown under every mobile number field.
+  static const String phoneHelperText = 'Format: 09XXXXXXXXX';
+
+  /// Input formatters for every mobile number field: letters, spaces and
+  /// symbols cannot be typed or pasted, and at most 11 digits fit.
+  static final List<TextInputFormatter> phoneFormatters = [
+    FilteringTextInputFormatter.digitsOnly,
+    LengthLimitingTextInputFormatter(11),
+  ];
+
+  /// Input formatters for money fields (price, payment, penalty), UI audit
+  /// #16: digits and one decimal point with at most 2 decimals, e.g.
+  /// "1500" or "1500.50". Letters, commas and a second dot cannot be typed.
+  static final List<TextInputFormatter> moneyFormatters = [decimalFormatter()];
+
+  /// Input formatters for body measurements in inches (UI audit #24):
+  /// up to 3 digits and 2 decimals, e.g. "32.5".
+  static final List<TextInputFormatter> measurementFormatters = [
+    decimalFormatter(maxWholeDigits: 3),
+  ];
+
+  /// A formatter that only accepts a decimal number with at most
+  /// [maxWholeDigits] digits before the point and [maxDecimals] after it.
+  /// If a key press (or paste) would break the rule, the old text is kept.
+  static TextInputFormatter decimalFormatter({
+    int maxWholeDigits = 9,
+    int maxDecimals = 2,
+  }) {
+    final pattern = RegExp(
+      '^\\d{0,$maxWholeDigits}(\\.\\d{0,$maxDecimals})?\$',
+    );
+    return TextInputFormatter.withFunction(
+      (oldValue, newValue) =>
+          pattern.hasMatch(newValue.text) ? newValue : oldValue,
+    );
+  }
 
   /// Fails when the value is null or only whitespace.
   static String? required(String? value, {String fieldName = 'This field'}) {
@@ -32,17 +84,35 @@ abstract final class Validators {
     return null;
   }
 
-  /// Philippine mobile number. Spaces and dashes are ignored.
-  /// When [isRequired] is false, an empty value is accepted.
+  /// Philippine mobile number: exactly 11 digits starting with 09.
+  /// Spaces, dashes and "+63" are NOT accepted (the field's formatters
+  /// already stop them from being typed). When [isRequired] is false, an
+  /// empty value is accepted.
   static String? phone(String? value, {bool isRequired = true}) {
-    final cleaned = (value ?? '').replaceAll(RegExp(r'[\s-]'), '');
-    if (cleaned.isEmpty) {
+    final text = value ?? '';
+    if (text.trim().isEmpty) {
       return isRequired ? 'Mobile number is required.' : null;
     }
-    if (!_phPhonePattern.hasMatch(cleaned)) {
-      return 'Use 09XXXXXXXXX or +639XXXXXXXXX.';
-    }
+    if (!_phPhonePattern.hasMatch(text)) return phoneFormatError;
     return null;
+  }
+
+  /// Turns an older saved number into 09XXXXXXXXX, or null if it cannot
+  /// be fixed. Used to pre-fill edit forms. Examples:
+  ///   "0917 123 4567" -> "09171234567"
+  ///   "+63 917 123 4567" / "639171234567" -> "09171234567"
+  ///   "9171234567" -> "09171234567"
+  static String? normalizePhone(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+    String? result;
+    if (digits.length == 11 && digits.startsWith('09')) {
+      result = digits;
+    } else if (digits.length == 12 && digits.startsWith('639')) {
+      result = '0${digits.substring(2)}';
+    } else if (digits.length == 10 && digits.startsWith('9')) {
+      result = '0$digits';
+    }
+    return result;
   }
 
   /// A number between [min] and [max] inclusive (e.g. measurements in

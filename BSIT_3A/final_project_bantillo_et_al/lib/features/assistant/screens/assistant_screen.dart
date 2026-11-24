@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+
+import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/widgets/ai_label.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
+import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/features/assistant/services/assistant_service.dart';
 
 class AssistantScreen extends StatefulWidget {
@@ -13,10 +18,15 @@ class _ChatMessage {
   final bool isUser;
   final bool isError;
 
+  /// True only for replies that came from the AI (not the fixed welcome
+  /// text or error notices). These show the "AI-generated" label.
+  final bool isAi;
+
   const _ChatMessage({
     required this.text,
     required this.isUser,
     this.isError = false,
+    this.isAi = false,
   });
 }
 
@@ -89,7 +99,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
       if (!mounted) return;
 
       setState(() {
-        _messages.add(_ChatMessage(text: reply, isUser: false));
+        _messages.add(_ChatMessage(text: reply, isUser: false, isAi: true));
         _isLoading = false;
       });
     } catch (error) {
@@ -168,11 +178,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 18,
-                  color: Colors.deepOrange.shade700,
-                ),
+                Icon(Icons.info_outline, size: 18, color: AppColors.maroon),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -181,6 +187,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
+                // UI audit #9: a human fallback, always visible at the top
+                // of the chat (opens a dialog with Call and Copy).
+                const ContactShopButton(),
               ],
             ),
           ),
@@ -253,24 +262,26 @@ class _AssistantScreenState extends State<AssistantScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!isUser)
+            // AI replies: the shared "AI-generated" badge (UI audit #20).
+            if (message.isAi)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: AiLabel(),
+              )
+            else if (!isUser)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.auto_awesome,
-                      size: 14,
-                      color: Colors.deepOrange.shade700,
-                    ),
+                    Icon(Icons.auto_awesome, size: 14, color: AppColors.maroon),
                     const SizedBox(width: 5),
                     Text(
-                      message.isError ? 'Notice' : 'Orange 150 AI',
+                      message.isError ? 'Notice' : 'Orange 150',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Colors.deepOrange.shade700,
+                        color: AppColors.maroon,
                       ),
                     ),
                   ],
@@ -302,11 +313,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.auto_awesome,
-              size: 16,
-              color: Colors.deepOrange.shade700,
-            ),
+            Icon(Icons.auto_awesome, size: 16, color: AppColors.maroon),
             const SizedBox(width: 8),
             const Text('Thinking...'),
           ],
@@ -351,9 +358,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
             const SizedBox(width: 8),
             IconButton(
               onPressed: _isLoading ? null : () => _sendMessage(),
+              tooltip: 'Send message', // UI audit #39
               icon: const Icon(Icons.send_rounded),
               style: IconButton.styleFrom(
-                backgroundColor: Colors.deepOrange.shade600,
+                backgroundColor: AppColors.maroon,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: Colors.grey.shade300,
               ),

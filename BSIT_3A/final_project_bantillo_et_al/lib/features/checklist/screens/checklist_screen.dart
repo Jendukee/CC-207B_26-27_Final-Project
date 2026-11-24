@@ -16,6 +16,10 @@
 // save_checklist is called. If anything fails, an error with Retry is
 // shown; photos already uploaded are not uploaded again.
 //
+// Shop-side redesign (Phase 2): light grey page under the white section
+// cards, and the sticky bar shows the balance (release) or the penalty
+// (return) on the left and the main action on the right (H1, H4).
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -25,8 +29,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/core/widgets/status_chip.dart';
 import 'package:orange150_rental/features/checklist/models/checklist_booking.dart';
 import 'package:orange150_rental/features/checklist/models/checklist_kind.dart';
@@ -70,6 +78,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   final TextEditingController _conditionNotes = TextEditingController();
   final TextEditingController _damageNotes = TextEditingController();
   final TextEditingController _penalty = TextEditingController(text: '0');
+
+  /// True once the late fee was put in the penalty field (Phase 3).
+  bool _penaltyPrefilled = false;
 
   // Loading the booking.
   ChecklistBooking? _booking;
@@ -131,6 +142,17 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         _lines = lines;
         _ticked.retainAll(lines.map((l) => l.key));
         _loading = false;
+        // Phase 3: pre-fill the late fee ONCE (₱200 per day after the
+        // return date). Staff may still edit it; a reload keeps their edit.
+        if (!_isRelease && !_penaltyPrefilled) {
+          _penaltyPrefilled = true;
+          _penalty.text = ChecklistRules.penaltyText(
+            ChecklistRules.lateFee(
+              returnDate: booking.booking.returnDate,
+              returnedOn: DateTime.now(),
+            ),
+          );
+        }
       });
     } on ChecklistException catch (e) {
       if (!mounted) return;
@@ -298,10 +320,14 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isRelease ? 'Release Checklist' : 'Return Checklist'),
+      // Shop-side redesign: light grey page under the white cards (H4).
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: _isRelease ? 'Release Checklist' : 'Return Checklist',
       ),
       body: _buildBody(),
+      bottomNavigationBar: _bottomBar(),
     );
   }
 
@@ -499,30 +525,51 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         TextFormField(
           controller: _penalty,
           enabled: !_saving,
+          // Phase 2: rebuild so the bottom bar's penalty follows the field.
+          onChanged: (_) => setState(() {}),
+          // UI audit #16: digits and one decimal point (max 2 decimals).
+          inputFormatters: Validators.moneyFormatters,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: const InputDecoration(
             labelText: 'Penalty',
             prefixText: '₱ ',
-            helperText: 'Enter 0 if there is no penalty.',
+            // Phase 3: the field starts with the late fee; staff add any
+            // damage charge or change it.
+            helperText: 'Starts with the late fee. Add any damage charge.',
+            helperMaxLines: 2,
           ),
           validator: ChecklistRules.validatePenalty,
         ),
+        // Phase 3: how the pre-filled late fee was worked out.
+        if (_booking != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.schedule,
+                size: 18,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Late fee: ${ChecklistRules.lateFeeExplanation(returnDate: _booking!.booking.returnDate, returnedOn: DateTime.now())}',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
 
   /// Error with Retry, progress while saving, and the main button.
+  /// Save error (with Retry) and upload progress, at the end of the form.
+  /// The button itself is in the sticky bottom bar (_bottomBar).
   Widget _saveArea(ChecklistBooking booking) {
-    final blockedReason = _isRelease
-        ? ChecklistRules.releaseBlockedReason(
-            lines: _lines,
-            ticked: _ticked,
-            balance: booking.booking.balance,
-          )
-        : null;
-    final canPress = !_saving && blockedReason == null;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -537,60 +584,81 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        if (_saving) ...[
-          const LinearProgressIndicator(),
-          const SizedBox(height: 8),
-          Text(_progress, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-        ],
-        if (blockedReason != null && !_saving)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(blockedReason, textAlign: TextAlign.center),
-          ),
-        FilledButton.icon(
-          onPressed: canPress ? _save : null,
-          icon: Icon(
-            _isRelease ? Icons.outbox_outlined : Icons.assignment_return,
-          ),
-          label: Text(_isRelease ? 'Release items' : 'Mark returned'),
-        ),
+        if (_saving) const LinearProgressIndicator(),
       ],
     );
   }
 
-  /// A titled card section.
+  /// A titled card section. Customer redesign: drawn by the shared core
+  /// SectionCard so staff and customer cards look the same.
   Widget _card({
     required String title,
     required IconData icon,
     required List<Widget> children,
     Widget? trailing,
   }) {
-    final theme = Theme.of(context);
-    return Card(
+    return SectionCard(
+      title: title,
+      icon: icon,
+      trailing: trailing,
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(title, style: theme.textTheme.titleMedium),
-                  ),
-                ),
-                ?trailing,
-              ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  /// Sticky bottom bar with "Release items" / "Mark returned" (shared
+  /// StickyActionBar). Above the button it says why it is disabled.
+  Widget? _bottomBar() {
+    final booking = _booking;
+    if (_loading || _loadError != null || booking == null) return null;
+    if (booking.booking.status != _requiredStatus) return null;
+    final blockedReason = _isRelease
+        ? ChecklistRules.releaseBlockedReason(
+            lines: _lines,
+            ticked: _ticked,
+            balance: booking.booking.balance,
+          )
+        : null;
+    // Shop-side redesign (Phase 2): the amount that matters on the left,
+    // like Record payment and the customer checkout (H1, H4): the balance
+    // still owed at release, or the penalty being charged at return.
+    final theme = Theme.of(context);
+    final amount = _isRelease
+        ? booking.booking.balance
+        : ChecklistRules.parsePenalty(_penalty.text);
+    return StickyActionBar(
+      message: _saving ? _progress : blockedReason,
+      leading: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isRelease ? 'Balance' : 'Penalty',
+            style: theme.textTheme.bodySmall,
+          ),
+          Text(
+            Formatters.peso(amount),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: amount > 0 ? AppColors.deepRed : AppColors.success,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 8),
-            ...children,
-          ],
-        ),
+          ),
+        ],
+      ),
+      action: FilledButton.icon(
+        onPressed: !_saving && blockedReason == null ? _save : null,
+        icon: _saving
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                _isRelease ? Icons.outbox_outlined : Icons.assignment_return,
+              ),
+        label: Text(_isRelease ? 'Release items' : 'Mark returned'),
       ),
     );
   }

@@ -1,3 +1,9 @@
+// Sends chat messages to the ai-assistant Supabase Edge Function, which
+// calls Gemini (the API key never ships in the app). Returns the reply
+// text or throws with a message the screen can show.
+//
+// OWNER: Member 1.
+
 import 'package:orange150_rental/core/config/env.dart';
 import 'package:orange150_rental/core/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';

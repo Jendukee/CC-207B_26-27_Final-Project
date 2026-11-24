@@ -11,6 +11,12 @@
 // * Data is loaded per month (CalendarRules.loadRange) when the visible
 //   month changes; the filter is applied in Dart.
 //
+// Shop-side redesign (Phase 2): light grey page with white cards: the
+// filters (Month / Week, category chips in one sideways-scrolling row, the
+// item picker), the calendar with its StatusChip legend, and the day's
+// bookings as booking cards like My Bookings, with skeleton cards while
+// loading (H1, H4, H6). Data and rules are unchanged.
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -20,9 +26,11 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
-import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/list_skeleton.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/features/shop_calendar/models/calendar_booking.dart';
 import 'package:orange150_rental/features/shop_calendar/models/calendar_rules.dart';
 import 'package:orange150_rental/features/shop_calendar/services/shop_calendar_service.dart';
@@ -184,8 +192,10 @@ class _ShopCalendarScreenState extends State<ShopCalendarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Calendar'),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: 'Calendar',
         actions: [
           IconButton(
             tooltip: 'Today',
@@ -210,17 +220,38 @@ class _ShopCalendarScreenState extends State<ShopCalendarScreen> {
         builder: (context, constraints) {
           final wide =
               constraints.maxWidth >= ShopCalendarScreen.sidePanelBreakpoint;
+          // Phase 2: white cards on the grey page.
           final top = [
-            _filterBar(),
-            const SizedBox(height: 8),
-            const CalendarLegend(),
-            if (_loading && _loadedMonth != null) ...[
-              const SizedBox(height: 8),
-              const LinearProgressIndicator(),
-            ],
-            const SizedBox(height: 8),
-            _calendar(),
+            SectionCard(
+              title: 'Filters',
+              icon: Icons.filter_list,
+              margin: const EdgeInsets.only(bottom: 12),
+              child: _filterBar(),
+            ),
+            SectionCard(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_loading && _loadedMonth != null) ...[
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 8),
+                  ],
+                  _calendar(),
+                  const Divider(height: 24),
+                  // The same chips as the bookings use (H4).
+                  const CalendarLegend(),
+                ],
+              ),
+            ),
           ];
+          final day = SectionCard(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: _dayPanel(),
+            ),
+          );
 
           if (wide) {
             return Row(
@@ -232,20 +263,19 @@ class _ShopCalendarScreenState extends State<ShopCalendarScreen> {
                     children: top,
                   ),
                 ),
-                const VerticalDivider(width: 1),
                 SizedBox(
                   width: 380,
                   child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: _dayPanel(),
+                    padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                    children: [day],
                   ),
                 ),
               ],
             );
           }
           return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [...top, const Divider(height: 32), ..._dayPanel()],
+            padding: const EdgeInsets.all(12),
+            children: [...top, day],
           );
         },
       ),
@@ -273,17 +303,24 @@ class _ShopCalendarScreenState extends State<ShopCalendarScreen> {
           selected: {_format},
           onSelectionChanged: (s) => setState(() => _format = s.first),
         ),
-        // SegmentedButton needs non-null values, so "all" is a string key.
-        SegmentedButton<String>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: 'all', label: Text('All')),
-            ButtonSegment(value: 'gown', label: Text('Gowns')),
-            ButtonSegment(value: 'suit', label: Text('Suits')),
-          ],
-          selected: {_filter.type?.dbValue ?? 'all'},
-          onSelectionChanged: (s) =>
-              _setType(s.first == 'all' ? null : ItemType.fromDb(s.first)),
+        // Category filter: All plus every item type (gown, long gown, suit,
+        // bearer since migration 0010). Phase 2: one row of chips that
+        // scrolls sideways, like the customer Browse categories (H4).
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final type in <ItemType?>[null, ...ItemType.values])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(type?.label ?? 'All'),
+                    selected: _filter.type == type,
+                    onSelected: (_) => _setType(type),
+                  ),
+                ),
+            ],
+          ),
         ),
         SizedBox(
           width: 280,
@@ -394,13 +431,35 @@ class _ShopCalendarScreenState extends State<ShopCalendarScreen> {
   /// empty states).
   List<Widget> _dayPanel() {
     final theme = Theme.of(context);
-    final heading = Text(
-      Formatters.date(_selectedDay),
-      style: theme.textTheme.titleMedium,
+    final heading = Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(Icons.event_note, size: 20, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(
+                Formatters.date(_selectedDay),
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
 
     if (_loading && _loadedMonth == null) {
-      return [heading, const LoadingView(message: 'Loading bookings...')];
+      // Phase 2: booking-shaped skeleton cards instead of a spinner (H1).
+      return [
+        heading,
+        const ListSkeleton(
+          count: 2,
+          showPhoto: false,
+          padding: EdgeInsets.zero,
+        ),
+      ];
     }
     if (_error != null) {
       return [

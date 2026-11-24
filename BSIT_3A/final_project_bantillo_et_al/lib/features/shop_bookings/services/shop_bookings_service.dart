@@ -57,9 +57,15 @@ class ShopBookingsService {
   static const String _listColumns =
       '*, '
       'customer:profiles!bookings_customer_id_fkey(full_name, phone), '
-      'booking_items(price, item:items(id, name, type, size, inclusions))';
+      // Shop-side redesign: photo_urls too (read only), for the item photo
+      // on the booking cards.
+      'booking_items(price, '
+      'item:items(id, name, type, size, inclusions, photo_urls))';
 
-  static const String _detailColumns = '$_listColumns, payments(*)';
+  // Customer redesign 2: checklists(kind, created_at) too, a READ only, for
+  // the Picked up / Returned dates on the status card's timeline.
+  static const String _detailColumns =
+      '$_listColumns, payments(*), checklists(kind, created_at)';
 
   /// Bookings matching [filter], newest first.
   Future<List<ShopBooking>> listBookings(ShopBookingFilter filter) async {
