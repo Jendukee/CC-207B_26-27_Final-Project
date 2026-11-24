@@ -7,21 +7,25 @@
 // a labelled search field (#29), condition chips, go_router navigation to
 // the item form and room for the Add Item button (#30).
 //
+// Shop-side redesign (Phase 2): like the customer Browse page, a light grey
+// page, the search and the condition chips pinned on a white bar, and a
+// 2-column grid of item cards (photo, condition chip, name, type, size,
+// price) with skeleton cards while loading (H1, H4, H6). The description
+// and inclusions moved off the card to the item form (H8). Data and filters
+// are unchanged.
+//
 // OWNER: Member 1.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
-import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
-import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
-import 'package:orange150_rental/core/widgets/loading_view.dart';
-import 'package:orange150_rental/core/widgets/status_chip.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
+import 'package:orange150_rental/features/inventory/widgets/inventory_item_card.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 
 /// Staff inventory management screen.
@@ -119,119 +123,18 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
     await _loadItems();
   }
 
-  /// "₱3,500.00" (shared format, UI audit #23).
-  String _formatPrice(double price) => Formatters.peso(price);
-
-  /// Chip colors dark enough for white text (UI audit #19), the same
-  /// palette as the booking status chips.
-  Color _conditionColor(ItemCondition condition) {
-    switch (condition) {
-      case ItemCondition.available:
-        return AppColors.success;
-      case ItemCondition.cleaningRepair:
-        return AppColors.warningOrange;
-      case ItemCondition.retired:
-        return AppColors.neutralGrey;
-    }
-  }
-
-  Widget _buildItemCard(Item item) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: 220,
-            width: double.infinity,
-            child: item.photoUrls.isNotEmpty
-                ? Image.network(
-                    item.photoUrls.first,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) =>
-                        const Center(child: Icon(Icons.broken_image, size: 48)),
-                  )
-                : Container(
-                    color: Colors.grey.shade200,
-                    child: const Center(child: Icon(Icons.checkroom, size: 64)),
-                  ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Edit item',
-                      onPressed: () => _openForm(itemId: item.id),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('${item.type.label} • ${item.ageGroup.label}'),
-                Text(
-                  'Size: ${item.size.isEmpty ? "Not specified" : item.size}',
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _formatPrice(item.price),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                StatusChip(
-                  label: item.condition.label,
-                  color: _conditionColor(item.condition),
-                ),
-                // UI audit #22: the card has a fixed height, so long text
-                // is cut with "..." instead of overflowing.
-                if (item.description.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    item.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-                if (item.inclusions.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Inclusions: ${item.inclusions.join(", ")}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                ],
-              ],
-            ),
+  Widget _buildBody() {
+    // Shop-side redesign: grey skeleton cards in the grid while loading
+    // (H1), like Browse; the shared error (Retry) and empty views (#28).
+    if (_isLoading) {
+      return const CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.all(16),
+            sliver: InventoryGridSkeleton(),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    // UI audit #28: the shared loading, error (Retry) and empty views.
-    if (_isLoading) {
-      return const LoadingView(message: 'Loading inventory...');
+      );
     }
 
     if (_errorMessage != null) {
@@ -259,36 +162,34 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
       );
     }
 
+    // Shop-side redesign: a 2-column grid of Browse-style cards (3 from
+    // 700 px, 4 from 1000 px). Tapping a card opens the item form.
     return RefreshIndicator(
       onRefresh: _loadItems,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-
-          final columns = width >= 1200
-              ? 4
-              : width >= 900
-              ? 3
-              : width >= 600
-              ? 2
-              : 1;
-
-          return GridView.builder(
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
             // Extra bottom space so the Add Item button never covers the
             // last card (UI audit #30).
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              mainAxisExtent: 560,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) => SliverGrid.builder(
+                gridDelegate: inventoryGridDelegate(
+                  constraints.crossAxisExtent,
+                ),
+                itemCount: filteredItems.length,
+                itemBuilder: (context, index) {
+                  final item = filteredItems[index];
+                  return InventoryItemCard(
+                    item: item,
+                    onTap: () => _openForm(itemId: item.id),
+                  );
+                },
+              ),
             ),
-            itemCount: filteredItems.length,
-            itemBuilder: (context, index) {
-              return _buildItemCard(filteredItems[index]);
-            },
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -296,6 +197,7 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(
         title: 'Inventory',
@@ -309,52 +211,69 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                // UI audit #29: a visible label, not a placeholder only.
-                labelText: 'Search inventory',
-                hintText: 'Name, type, size or age group',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                        icon: const Icon(Icons.clear),
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-          // UI audit #30: a single-choice filter with 4 options is shown
-          // as chips (one tap, all options visible) instead of a dropdown.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                for (final condition in <ItemCondition?>[
-                  null,
-                  ...ItemCondition.values,
-                ])
+          // Shop-side redesign: search and chips pinned on a white bar.
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                children: [
                   Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(condition?.label ?? 'All active items'),
-                      selected: _selectedCondition == condition,
-                      onSelected: (_) =>
-                          setState(() => _selectedCondition = condition),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        // UI audit #29: a visible label, not a placeholder only.
+                        labelText: 'Search inventory',
+                        hintText: 'Name, type, size or age group',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.clear),
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
                   ),
-              ],
+                  // UI audit #30: a single-choice filter with 4 options is shown
+                  // as chips (one tap, all options visible) instead of a dropdown.
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        for (final condition in <ItemCondition?>[
+                          null,
+                          ...ItemCondition.values,
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(
+                                condition?.label ?? 'All active items',
+                              ),
+                              selected: _selectedCondition == condition,
+                              onSelected: (_) => setState(
+                                () => _selectedCondition = condition,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(child: _buildBody()),

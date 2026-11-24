@@ -9,6 +9,11 @@
 // (#26), FilledButton (#27), shared Loading/Error views (#28), inclusions
 // as chips and a discard-changes warning (#40).
 //
+// Shop-side redesign (Phase 2): the fields in white section cards on a grey
+// page, and a sticky bar with the price on the left and Save on the right.
+// The separate Cancel button was dropped: Back does the same and still
+// asks before discarding changes (H3, H8).
+//
 // OWNER: Member 1.
 
 import 'dart:typed_data';
@@ -17,10 +22,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
 
@@ -490,204 +498,265 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
     );
   }
 
+  /// Shop-side redesign (Phase 2): the same fields and validators as
+  /// before, grouped into white section cards on a light grey page
+  /// ("Item details", "Price and condition", "Description and inclusions",
+  /// "Photos"), like the customer checkout (H4, H8). Save is in the sticky
+  /// bottom bar (see _bottomBar); Back still asks before discarding.
   Widget _buildForm() {
+    const gap = EdgeInsets.only(bottom: 12);
     return Form(
       key: _formKey,
-      // Any typed change marks the form as changed (discard warning).
-      onChanged: () => _dirty = true,
+      // Any typed change marks the form as changed (discard warning) and
+      // rebuilds, so the bottom bar's price follows the field (Phase 2).
+      onChanged: () => setState(() => _dirty = true),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         children: [
-          TextFormField(
-            controller: _nameController,
-            // UI audit #26: errors show once the field was touched.
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(
-              labelText: 'Item Name *',
-              hintText: 'e.g. Ivory Ball Gown',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Item name is required.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          // UI audit #21: exactly one of two options -> SegmentedButton,
-          // so both choices are always visible (was a dropdown).
-          _segmentedField<ItemType>(
-            label: 'Item Type *',
-            values: ItemType.values,
-            labelOf: (type) => type.label,
-            selected: _type,
-            onChanged: (type) => setState(() => _type = type),
-          ),
-          const SizedBox(height: 16),
-          _segmentedField<AgeGroup>(
-            label: 'Age Group *',
-            values: AgeGroup.values,
-            labelOf: (group) => group.label,
-            selected: _ageGroup,
-            onChanged: (group) => setState(() => _ageGroup = group),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _sizeController,
-            // UI audit #26: errors show once the field was touched.
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: const InputDecoration(
-              labelText: 'Size *',
-              hintText: 'e.g. S, M, L, 8-10',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Size is required.';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _priceController,
-            // UI audit #26: errors show once the field was touched.
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            // UI audit #16: digits and one decimal point (max 2 decimals).
-            inputFormatters: Validators.moneyFormatters,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Rental Price (PHP) *',
-              prefixText: '₱ ',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Rental price is required.';
-              }
-
-              final price = double.tryParse(value.trim());
-
-              if (price == null || price <= 0) {
-                return 'Enter a valid price greater than zero.';
-              }
-
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<ItemCondition>(
-            initialValue: _condition,
-            decoration: const InputDecoration(
-              labelText: 'Physical Condition',
-              border: OutlineInputBorder(),
-            ),
-            items: ItemCondition.values.map((condition) {
-              return DropdownMenuItem(
-                value: condition,
-                child: Text(condition.label),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _condition = value;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _descriptionController,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Description',
-              hintText: 'Describe the item...',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // UI audit #40: inclusions as chips. Type one, press Add (or
-          // Enter); remove one with its x.
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _inclusionsController,
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _addInclusion(),
+          SectionCard(
+            title: 'Item details',
+            icon: Icons.checkroom_outlined,
+            margin: gap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _nameController,
+                  // UI audit #26: errors show once the field was touched.
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   decoration: const InputDecoration(
-                    labelText: 'Add an inclusion',
-                    hintText: 'e.g. Veil',
-                    helperText: 'Free accessories that come with the item.',
+                    labelText: 'Item Name *',
+                    hintText: 'e.g. Ivory Ball Gown',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Item name is required.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                // UI audit #21: exactly one of two options -> SegmentedButton,
+                // so both choices are always visible (was a dropdown).
+                _segmentedField<ItemType>(
+                  label: 'Item Type *',
+                  values: ItemType.values,
+                  labelOf: (type) => type.label,
+                  selected: _type,
+                  onChanged: (type) => setState(() => _type = type),
+                ),
+                const SizedBox(height: 16),
+                _segmentedField<AgeGroup>(
+                  label: 'Age Group *',
+                  values: AgeGroup.values,
+                  labelOf: (group) => group.label,
+                  selected: _ageGroup,
+                  onChanged: (group) => setState(() => _ageGroup = group),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _sizeController,
+                  // UI audit #26: errors show once the field was touched.
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  decoration: const InputDecoration(
+                    labelText: 'Size *',
+                    hintText: 'e.g. S, M, L, 8-10',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Size is required.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          SectionCard(
+            title: 'Price and condition',
+            icon: Icons.sell_outlined,
+            margin: gap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _priceController,
+                  // UI audit #26: errors show once the field was touched.
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  // UI audit #16: digits and one decimal point (max 2 decimals).
+                  inputFormatters: Validators.moneyFormatters,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Rental Price (PHP) *',
+                    prefixText: '₱ ',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Rental price is required.';
+                    }
+
+                    final price = double.tryParse(value.trim());
+
+                    if (price == null || price <= 0) {
+                      return 'Enter a valid price greater than zero.';
+                    }
+
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<ItemCondition>(
+                  initialValue: _condition,
+                  decoration: const InputDecoration(
+                    labelText: 'Physical Condition',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ItemCondition.values.map((condition) {
+                    return DropdownMenuItem(
+                      value: condition,
+                      child: Text(condition.label),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _condition = value;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          SectionCard(
+            title: 'Description and inclusions',
+            icon: Icons.notes_outlined,
+            margin: gap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Describe the item...',
                     border: OutlineInputBorder(),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 56,
-                child: OutlinedButton(
-                  onPressed: _isSaving ? null : _addInclusion,
-                  child: const Text('Add'),
+                const SizedBox(height: 16),
+                // UI audit #40: inclusions as chips. Type one, press Add (or
+                // Enter); remove one with its x.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _inclusionsController,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _addInclusion(),
+                        decoration: const InputDecoration(
+                          labelText: 'Add an inclusion',
+                          hintText: 'e.g. Veil',
+                          helperText:
+                              'Free accessories that come with the item.',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 56,
+                      child: OutlinedButton(
+                        onPressed: _isSaving ? null : _addInclusion,
+                        child: const Text('Add'),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          if (_inclusions.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final inclusion in _inclusions)
-                  InputChip(
-                    label: Text(inclusion),
-                    onDeleted: _isSaving
-                        ? null
-                        : () => setState(() {
-                            _inclusions.remove(inclusion);
-                            _dirty = true;
-                          }),
-                    deleteButtonTooltipMessage: 'Remove $inclusion',
+                if (_inclusions.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final inclusion in _inclusions)
+                        InputChip(
+                          label: Text(inclusion),
+                          onDeleted: _isSaving
+                              ? null
+                              : () => setState(() {
+                                  _inclusions.remove(inclusion);
+                                  _dirty = true;
+                                }),
+                          deleteButtonTooltipMessage: 'Remove $inclusion',
+                        ),
+                    ],
                   ),
+                ],
               ],
             ),
-          ],
-          const SizedBox(height: 24),
-          _buildPhotoSection(),
-          const SizedBox(height: 24),
-          if (_errorMessage != null) ...[
-            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 12),
-          ],
-          // UI audit #27: the app's primary button style (FilledButton).
-          SizedBox(
-            height: 50,
-            child: FilledButton(
-              onPressed: _isSaving ? null : _saveItem,
-              child: _isSaving
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(_isEditing ? 'Save Changes' : 'Add Item'),
+          ),
+          // The photo picker keeps its own "Item Photos" heading.
+          SectionCard(margin: gap, child: _buildPhotoSection()),
+          if (_errorMessage != null)
+            // A failed save keeps the form (UI audit #11).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.error_outline, color: AppColors.deepRed),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: AppColors.deepRed),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Sticky bar (Phase 2): the rental price on the left and the main
+  /// action on the right, like Record payment and the checkout (H1, H4).
+  /// UI audit #27: the app's primary button style (FilledButton).
+  Widget _bottomBar() {
+    final theme = Theme.of(context);
+    final price = double.tryParse(_priceController.text.trim());
+    return StickyActionBar(
+      leading: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Rental price', style: theme.textTheme.bodySmall),
+          Text(
+            price == null ? '₱ –' : Formatters.peso(price),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.maroon,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            // Same discard check as Back.
-            onPressed: _isSaving
-                ? null
-                : () =>
-                      _dirty ? _confirmDiscard() : Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          const SizedBox(height: 24),
         ],
+      ),
+      action: FilledButton(
+        onPressed: _isSaving ? null : _saveItem,
+        child: _isSaving
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(_isEditing ? 'Save Changes' : 'Add Item'),
       ),
     );
   }
@@ -701,8 +770,14 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         if (!didPop) _confirmDiscard();
       },
       child: Scaffold(
+        // Phase 2: light grey page under the white section cards (H4).
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
         // Customer redesign 2: shared header with the Orange 150 mark (H4).
         appBar: BrandAppBar(title: _isEditing ? 'Edit Item' : 'Add Item'),
+        // Phase 2: Save in a sticky bar, only while the form is shown.
+        bottomNavigationBar: _isLoading || _loadError != null
+            ? null
+            : _bottomBar(),
         // UI audit #28: the shared loading and error (Retry) views.
         body: _isLoading
             ? const LoadingView(message: 'Loading item...')
