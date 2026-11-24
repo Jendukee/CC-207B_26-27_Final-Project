@@ -7,6 +7,10 @@
 // (Retry) state. Pull to refresh. Wide screens (>= 900 px): the two charts
 // sit side by side.
 //
+// Shop-side redesign (Phase 2): grey page with white SectionCards; the range
+// selector (a SegmentedButton) is in its own "Time range" card at the top,
+// and each chart card shows its title and total first (H1, H4, H8).
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -14,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/features/reports/models/report_data.dart';
 import 'package:orange150_rental/features/reports/services/reports_service.dart';
 import 'package:orange150_rental/features/reports/widgets/month_bar_chart.dart';
@@ -75,6 +80,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(
         title: 'Reports',
@@ -125,22 +131,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   /// 3 / 6 / 12 months.
   Widget _rangeSelector() {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text('Show the last', style: Theme.of(context).textTheme.titleSmall),
-        SegmentedButton<ReportRange>(
-          showSelectedIcon: false,
-          segments: [
-            for (final range in ReportRange.values)
-              ButtonSegment(value: range, label: Text(range.label)),
-          ],
-          selected: {_range},
-          onSelectionChanged: (s) => _setRange(s.first),
-        ),
-      ],
+    return SectionCard(
+      title: 'Time range',
+      icon: Icons.date_range,
+      margin: EdgeInsets.zero,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('Show the last', style: Theme.of(context).textTheme.bodyMedium),
+          SegmentedButton<ReportRange>(
+            showSelectedIcon: false,
+            segments: [
+              for (final range in ReportRange.values)
+                ButtonSegment(value: range, label: Text(range.label)),
+            ],
+            selected: {_range},
+            onSelectionChanged: (s) => _setRange(s.first),
+          ),
+        ],
+      ),
     );
   }
 
