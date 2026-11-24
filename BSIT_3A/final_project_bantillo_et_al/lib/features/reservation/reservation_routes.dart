@@ -9,6 +9,7 @@
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/features/reservation/models/reservation_draft.dart';
 import 'package:orange150_rental/features/reservation/screens/booking_confirmation_screen.dart';
 import 'package:orange150_rental/features/reservation/screens/reserve_dates_screen.dart';
 import 'package:orange150_rental/features/reservation/screens/reserve_measurements_screen.dart';
@@ -26,14 +27,24 @@ final List<RouteBase> reservationRoutes = [
   GoRoute(
     path: RoutePaths.reserveMeasurements,
     name: RouteNames.reserveMeasurements,
-    builder: (context, state) =>
-        ReserveMeasurementsScreen(itemId: state.pathParameters['itemId']!),
+    builder: (context, state) {
+      final extra = state.extra;
+      return ReserveMeasurementsScreen(
+        itemId: state.pathParameters['itemId']!,
+        draft: extra is ReservationDraft ? extra : null,
+      );
+    },
   ),
   GoRoute(
     path: RoutePaths.reserveReview,
     name: RouteNames.reserveReview,
-    builder: (context, state) =>
-        ReserveReviewScreen(itemId: state.pathParameters['itemId']!),
+    builder: (context, state) {
+      final extra = state.extra;
+      return ReserveReviewScreen(
+        itemId: state.pathParameters['itemId']!,
+        draft: extra is ReservationDraft ? extra : null,
+      );
+    },
   ),
   GoRoute(
     path: RoutePaths.bookingConfirmation,
