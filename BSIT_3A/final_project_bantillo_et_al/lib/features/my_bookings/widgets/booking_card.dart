@@ -37,11 +37,22 @@ class BookingCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Text('Ref: ${b.referenceNo}', style: theme.textTheme.bodySmall),
+                    Text(
+                      'Ref: ${b.referenceNo}',
+                      style: theme.textTheme.bodySmall,
+                    ),
                     const SizedBox(height: 4),
                     Text('Event: ${formatDate(b.eventDate)}'),
                     const SizedBox(height: 4),
                     Text('Total: ${formatPeso(b.totalAmount)}'),
+                    // UI audit #8: pending requests show their deadline.
+                    if (payByText(b) != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        payByText(b)!,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ],
                 ),
               ),
