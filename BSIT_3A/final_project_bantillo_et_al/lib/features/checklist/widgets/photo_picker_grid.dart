@@ -107,7 +107,8 @@ class PhotoPickerGrid extends StatelessWidget {
             child: IconButton.filledTonal(
               tooltip: 'Remove photo ${index + 1}',
               iconSize: 16,
-              visualDensity: VisualDensity.compact,
+              // UI audit #33: no compact density, so the button keeps
+              // the 48 px minimum touch target.
               onPressed: enabled ? () => onRemove(index) : null,
               icon: const Icon(Icons.close),
             ),
