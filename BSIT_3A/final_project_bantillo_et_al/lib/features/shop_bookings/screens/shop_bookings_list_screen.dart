@@ -15,6 +15,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/widgets/async_list_view.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/features/shop_bookings/models/shop_booking.dart';
 import 'package:orange150_rental/features/shop_bookings/models/shop_booking_filter.dart';
@@ -85,8 +86,9 @@ class _ShopBookingsListScreenState extends State<ShopBookingsListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bookings'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: 'Bookings',
         actions: [
           IconButton(
             tooltip: 'Refresh',

@@ -18,6 +18,7 @@ import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
@@ -179,7 +180,8 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
         booking != null &&
         BookingRules.canRecordPayment(booking.booking);
     return Scaffold(
-      appBar: AppBar(title: const Text('Record Payment')),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: const BrandAppBar(title: 'Record Payment'),
       body: _buildBody(),
       // Customer redesign: the shared sticky bottom bar keeps Save payment
       // visible above the keyboard (same widget as the customer checkout).

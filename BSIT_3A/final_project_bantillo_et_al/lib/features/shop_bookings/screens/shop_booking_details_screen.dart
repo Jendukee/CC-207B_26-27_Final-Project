@@ -11,6 +11,15 @@
 // Used two ways: as a full page (/shop/bookings/:bookingId) and, with
 // embedded: true, as the side panel of the bookings list on wide screens.
 //
+// Customer redesign 2 (Phase 1), same layout as the customer details:
+//   * the header shows only "Booking Details" and the reference number
+//   * "Booking status" is the FIRST card (shared BookingStatusCard): status
+//     chip, status in words, what to do next, the payment deadline, the
+//     timeline (Requested, Reserved, Picked up, Returned) and ONE primary
+//     action for the next step (Record payment / Mark picked up / Mark
+//     returned). The Actions card keeps only the other actions (H1, H2, H8).
+//   No rule changed: the same BookingRules decide which actions exist.
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -20,12 +29,14 @@ import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/agreement_document.dart';
+import 'package:orange150_rental/core/widgets/booking_status_card.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
-import 'package:orange150_rental/core/widgets/status_chip.dart';
 import 'package:orange150_rental/features/shop_bookings/models/booking_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/payment_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/shop_booking.dart';
+import 'package:orange150_rental/features/shop_bookings/models/staff_status_text.dart';
 import 'package:orange150_rental/features/shop_bookings/services/shop_bookings_service.dart';
 import 'package:orange150_rental/features/shop_bookings/widgets/detail_section.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
@@ -175,8 +186,10 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
     final body = _buildBody();
     if (widget.embedded) return body;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_booking?.booking.referenceNo ?? 'Booking Details'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4):
+      // only the title and the reference number.
+      appBar: BrandAppBar(
+        titleWidget: _HeaderTitle(reference: _booking?.booking.referenceNo),
       ),
       body: body,
     );
@@ -203,7 +216,7 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
               ShopBookingDetailsScreen.twoColumnBreakpoint;
 
           final left = [
-            _header(booking),
+            _statusCard(booking),
             _customerSection(booking),
             _measurementsSection(booking.booking),
             _itemsSection(booking),
@@ -235,43 +248,69 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
     );
   }
 
-  /// Reference, status chip and the expired notice.
-  Widget _header(ShopBooking booking) {
+  /// Customer redesign 2: the "Booking status" card (it replaces the old
+  /// header with the reference, status chip, requested date and expired
+  /// notice; the requested date is now the first timeline step and the
+  /// expired text is the next step).
+  Widget _statusCard(ShopBooking booking) {
     final row = booking.booking;
     final status = BookingRules.effectiveStatus(row);
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(row.referenceNo, style: theme.textTheme.titleLarge),
-              ),
-              StatusChip.booking(status),
-            ],
-          ),
-          if (row.createdAt != null)
-            Text(
-              'Requested ${Formatters.dateTime(row.createdAt!)}',
-              style: theme.textTheme.bodySmall,
-            ),
-          if (BookingRules.isPastExpiry(row))
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: NoticeBox(
-                icon: Icons.timer_off_outlined,
-                color: AppColors.neutralGrey,
-                text:
-                    'This request expired on '
-                    '${Formatters.dateTime(row.expiresAt!)} without payment.',
-              ),
-            ),
-        ],
-      ),
+    final card = BookingStatusCard(
+      status: status,
+      statusText: StaffStatusText.words(status),
+      nextStep: StaffStatusText.nextStep(row, status),
+      deadline: status == BookingStatus.pending ? row.expiresAt : null,
+      steps: booking.timeline,
+      action: _primaryAction(row),
+      margin: const EdgeInsets.only(bottom: 12),
     );
+    if (!widget.embedded) return card; // the reference is in the header
+    // Side panel (no header): the reference above the card.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Ref ${row.referenceNo}',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        card,
+      ],
+    );
+  }
+
+  /// The ONE filled button for the next step, chosen with the same
+  /// BookingRules as before: a payment is owed first, then pick-up, then
+  /// return. Null when nothing is next.
+  Widget? _primaryAction(Booking booking) {
+    if (BookingRules.canRecordPayment(booking)) {
+      return FilledButton.icon(
+        onPressed: _busy ? null : _recordPayment,
+        icon: const Icon(Icons.add_card),
+        label: Text(
+          booking.status == BookingStatus.pending
+              ? 'Record payment to reserve'
+              : 'Record balance payment',
+        ),
+      );
+    }
+    if (BookingRules.canMarkPickedUp(booking)) {
+      return FilledButton.icon(
+        onPressed: _busy ? null : _markPickedUp,
+        icon: const Icon(Icons.outbox_outlined),
+        label: const Text('Mark picked up'),
+      );
+    }
+    if (BookingRules.canMarkReturned(booking)) {
+      return FilledButton.icon(
+        onPressed: _busy ? null : _markReturned,
+        icon: const Icon(Icons.assignment_return_outlined),
+        label: const Text('Mark returned'),
+      );
+    }
+    return null;
   }
 
   /// Customer name and mobile number.
@@ -469,39 +508,20 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
     );
   }
 
-  /// Buttons for the transitions allowed right now.
+  /// The OTHER actions allowed right now. Customer redesign 2: the primary
+  /// one (the next step) is on the status card, so it is not repeated here.
   Widget _actionsSection(Booking booking) {
     final status = BookingRules.effectiveStatus(booking);
     final buttons = <Widget>[
-      if (BookingRules.canRecordPayment(booking))
-        FilledButton.icon(
-          onPressed: _busy ? null : _recordPayment,
-          icon: const Icon(Icons.add_card),
-          label: Text(
-            booking.status == BookingStatus.pending
-                ? 'Record payment to reserve'
-                : 'Record balance payment',
-          ),
-        ),
-      // UI audit #31: only ONE filled (primary) button. While a balance
-      // is owed, "Record balance payment" is primary and this is outlined.
-      if (BookingRules.canMarkPickedUp(booking))
-        BookingRules.canRecordPayment(booking)
-            ? OutlinedButton.icon(
-                onPressed: _busy ? null : _markPickedUp,
-                icon: const Icon(Icons.outbox_outlined),
-                label: const Text('Mark picked up'),
-              )
-            : FilledButton.icon(
-                onPressed: _busy ? null : _markPickedUp,
-                icon: const Icon(Icons.outbox_outlined),
-                label: const Text('Mark picked up'),
-              ),
-      if (BookingRules.canMarkReturned(booking))
-        FilledButton.icon(
-          onPressed: _busy ? null : _markReturned,
-          icon: const Icon(Icons.assignment_return_outlined),
-          label: const Text('Mark returned'),
+      // UI audit #31: only ONE filled (primary) button. While a balance is
+      // owed, "Record balance payment" is primary (status card) and this
+      // is outlined.
+      if (BookingRules.canMarkPickedUp(booking) &&
+          BookingRules.canRecordPayment(booking))
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _markPickedUp,
+          icon: const Icon(Icons.outbox_outlined),
+          label: const Text('Mark picked up'),
         ),
       if (BookingRules.canCancel(booking))
         OutlinedButton.icon(
@@ -522,7 +542,11 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
       icon: Icons.bolt_outlined,
       children: [
         if (buttons.isEmpty)
-          Text('No actions available for ${status.label} bookings.'),
+          Text(
+            _primaryAction(booking) == null
+                ? 'No actions available for ${status.label} bookings.'
+                : 'The next step is on the Booking status card.',
+          ),
         if (BookingRules.canMarkPickedUp(booking) && booking.balance > 0)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -535,6 +559,32 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
             ),
           ),
         Wrap(spacing: 8, runSpacing: 8, children: buttons),
+      ],
+    );
+  }
+}
+
+/// Header title: "Booking Details" and, once loaded, "Ref O150-..."
+/// (customer redesign 2: the status itself is in the status card).
+class _HeaderTitle extends StatelessWidget {
+  const _HeaderTitle({this.reference});
+
+  final String? reference;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Booking Details', maxLines: 1),
+        if (reference != null)
+          Text(
+            'Ref $reference',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
+          ),
       ],
     );
   }

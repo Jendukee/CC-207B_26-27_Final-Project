@@ -6,6 +6,9 @@
 // The shared Booking model has no customer or item fields, so this
 // feature-private model wraps it instead of changing lib/shared/.
 //
+// Customer redesign 2: [checklistDates] (when the release / return
+// checklist was saved) for the status timeline on the details screen.
+//
 // OWNER: Member 3.
 
 import 'package:orange150_rental/shared/models/booking.dart';
@@ -65,14 +68,17 @@ class ShopBooking {
     this.customerPhone,
     this.items = const [],
     this.payments = const [],
+    this.checklistDates = const {},
   });
 
   /// Builds it from a `bookings` row with embedded `customer`,
-  /// `booking_items` and (on the details query) `payments`.
+  /// `booking_items` and (on the details query) `payments` and
+  /// `checklists`.
   factory ShopBooking.fromMap(Map<String, dynamic> map) {
     final customer = map['customer'] as Map<String, dynamic>?;
     final itemRows = map['booking_items'] as List? ?? const [];
     final paymentRows = map['payments'] as List? ?? const [];
+    final checklistRows = map['checklists'] as List? ?? const [];
 
     final name = (customer?['full_name'] as String? ?? '').trim();
     return ShopBooking(
@@ -87,6 +93,11 @@ class ShopBooking {
         for (final row in paymentRows)
           Payment.fromMap(row as Map<String, dynamic>),
       ],
+      checklistDates: {
+        for (final row in checklistRows.cast<Map<String, dynamic>>())
+          if (row['created_at'] != null)
+            row['kind'] as String: DateTime.parse(row['created_at'] as String),
+      },
     );
   }
 
@@ -104,6 +115,22 @@ class ShopBooking {
 
   /// Payments, oldest first. Empty on the list query.
   final List<Payment> payments;
+
+  /// 'release' / 'return' -> when that checklist was saved. Empty on the
+  /// list query.
+  final Map<String, DateTime> checklistDates;
+
+  /// Requested, Reserved (first payment), Picked up and Returned, with
+  /// the date each was reached (null = not yet), for the status card.
+  List<({String label, DateTime? date})> get timeline => [
+    (label: 'Requested', date: booking.createdAt),
+    (
+      label: 'Reserved',
+      date: payments.isEmpty ? null : payments.first.createdAt,
+    ),
+    (label: 'Picked up', date: checklistDates['release']),
+    (label: 'Returned', date: checklistDates['return']),
+  ];
 
   /// Item names joined, e.g. "Ivory Ball Gown, Classic Black Tuxedo".
   String get itemNames => items.map((i) => i.name).join(', ');
