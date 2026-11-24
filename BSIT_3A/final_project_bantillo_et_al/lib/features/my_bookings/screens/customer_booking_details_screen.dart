@@ -1,7 +1,12 @@
 // Customer booking details, laid out like an order page (customer
 // redesign, Phase 1):
-//   * a maroon status banner that says what to do next
-//   * a vertical timeline: Requested, Reserved, Picked up, Returned
+//   * header: only the title and the reference number (customer redesign
+//     2; the status banner left the header)
+//   * "Booking status" FIRST card (shared BookingStatusCard): status chip,
+//     the status in words, what to do next, the payment deadline, the
+//     timeline (Requested, Reserved, Picked up, Returned) and ONE action:
+//     "How to pay" while Pending (scrolls to that card), otherwise
+//     "Contact the shop" (H1, H2, H8)
 //   * Item, Rental schedule and Payment cards (paid, balance, method)
 //   * the signed agreement: "Signed as <name> on <date>" and "View signed
 //     agreement", which opens the exact form saved at signing (Phase 2)
@@ -12,25 +17,24 @@
 import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/config/rental_terms.dart';
-import 'package:orange150_rental/core/config/shop_contact.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/agreement_document.dart';
+import 'package:orange150_rental/core/widgets/booking_status_card.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/contact_shop.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/payment_instructions.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/features/my_bookings/models/booking_details.dart';
+import 'package:orange150_rental/features/my_bookings/models/customer_status_text.dart';
 import 'package:orange150_rental/features/my_bookings/models/my_booking.dart';
 import 'package:orange150_rental/features/my_bookings/services/my_bookings_service.dart';
 import 'package:orange150_rental/features/my_bookings/widgets/booking_formatters.dart';
-import 'package:orange150_rental/features/my_bookings/widgets/booking_status_badge.dart';
-import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/booking_status.dart';
 import 'package:orange150_rental/shared/models/payment.dart';
-import 'package:orange150_rental/shared/models/payment_plan.dart';
 
 class CustomerBookingDetailsScreen extends StatefulWidget {
   const CustomerBookingDetailsScreen({super.key, required this.bookingId});
@@ -48,6 +52,9 @@ class _CustomerBookingDetailsScreenState
   final _service = MyBookingsService();
   late Future<BookingDetails> _future;
   bool _cancelling = false;
+
+  /// The "How to pay" card, scrolled to from the status card.
+  final GlobalKey _howToPayKey = GlobalKey(debugLabel: 'howToPay');
 
   @override
   void initState() {
@@ -118,33 +125,21 @@ class _CustomerBookingDetailsScreenState
     }
   }
 
-  /// The banner's "what to do next" text for each displayed status.
-  static String nextStep(Booking b) {
-    final payNow = PaymentPlan.dueNow(b.totalAmount, b.paymentOption);
-    final deadline = b.expiresAt;
-    return switch (b.displayStatus()) {
-      BookingStatus.pending =>
-        'Pay ${formatPeso(payNow)}'
-            '${deadline == null ? '' : ' by ${Formatters.dateTime(deadline)}'}'
-            ' to reserve your dates. GCash: ${ShopContact.gcash}.',
-      BookingStatus.reserved =>
-        'Reserved! Pick up on ${formatDate(b.pickupDate)} at the shop.'
-            '${b.balance > 0 ? ' Bring the balance of ${formatPeso(b.balance)}.' : ''}',
-      BookingStatus.rentedOut =>
-        'Enjoy your event! Please return it by ${formatDate(b.returnDate)}.',
-      BookingStatus.returned => 'Returned. Thank you for renting with us!',
-      BookingStatus.cancelled => 'This booking was cancelled.',
-      BookingStatus.expired =>
-        'This request expired because it was not paid in time.',
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.colorScheme.surfaceContainerLow,
-      appBar: AppBar(title: const Text('Booking Details')),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4),
+      // showing only the title and, once loaded, the reference number.
+      appBar: BrandAppBar(
+        titleWidget: FutureBuilder<BookingDetails>(
+          future: _future,
+          builder: (context, snap) => _HeaderTitle(
+            reference: snap.hasData ? snap.data!.booking.referenceNo : null,
+          ),
+        ),
+      ),
       body: FutureBuilder<BookingDetails>(
         future: _future,
         builder: (context, snap) {
@@ -166,235 +161,241 @@ class _CustomerBookingDetailsScreenState
 
   Widget _content(BookingDetails d, ThemeData theme) {
     final b = d.booking;
+    final status = b.displayStatus();
     const gap = EdgeInsets.fromLTRB(8, 0, 8, 8);
     return RefreshIndicator(
       onRefresh: () async {
         setState(() => _future = _load());
         await _future.catchError((_) => d);
       },
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          // Status banner: what to do next.
-          Container(
-            color: AppColors.maroon,
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        b.displayStatus().label,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: AppColors.onMaroon,
+      // Customer redesign 2: a Column in a scroll view (not a lazy
+      // ListView), so "How to pay" can always scroll to its card.
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(top: 8, bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Customer redesign 2: everything about the status in the FIRST
+            // card (it replaces the maroon banner and the Progress card).
+            BookingStatusCard(
+              status: status,
+              statusText: CustomerStatusText.words(status),
+              nextStep: CustomerStatusText.nextStep(b),
+              deadline: status == BookingStatus.pending ? b.expiresAt : null,
+              steps: [
+                for (final s in d.timeline) (label: s.label, date: s.date),
+              ],
+              // One action: how to pay while Pending, otherwise the shop.
+              action: status == BookingStatus.pending
+                  ? FilledButton.icon(
+                      onPressed: _scrollToHowToPay,
+                      icon: const Icon(Icons.account_balance_wallet_outlined),
+                      label: const Text('How to pay'),
+                    )
+                  : const ContactShopButton(outlined: true),
+            ),
+
+            // The status chip is in the status card now (H8: shown once).
+            SectionCard(
+              title: 'Item',
+              icon: Icons.checkroom_outlined,
+              margin: gap,
+              child: Column(
+                children: [
+                  if (d.items.isEmpty) const Text('No items found.'),
+                  for (final item in d.items)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox.square(
+                          dimension: 56,
+                          child: item.photoUrls.isEmpty
+                              ? const Icon(Icons.checkroom)
+                              : Image.network(
+                                  item.photoUrls.first,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, _, _) =>
+                                      const Icon(Icons.checkroom),
+                                ),
                         ),
                       ),
+                      title: Text(item.name),
+                      subtitle: Text('${item.type.label} · Size ${item.size}'),
                     ),
-                    Text(
-                      'Ref ${b.referenceNo}',
-                      style: const TextStyle(color: AppColors.onMaroon),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  nextStep(b),
-                  style: const TextStyle(color: AppColors.onMaroon),
-                ),
-              ],
-            ),
-          ),
-
-          SectionCard(
-            title: 'Progress',
-            icon: Icons.timeline,
-            margin: gap,
-            child: _Timeline(steps: d.timeline),
-          ),
-
-          SectionCard(
-            title: 'Item',
-            icon: Icons.checkroom_outlined,
-            margin: gap,
-            trailing: BookingStatusBadge(status: b.displayStatus()),
-            child: Column(
-              children: [
-                if (d.items.isEmpty) const Text('No items found.'),
-                for (final item in d.items)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox.square(
-                        dimension: 56,
-                        child: item.photoUrls.isEmpty
-                            ? const Icon(Icons.checkroom)
-                            : Image.network(
-                                item.photoUrls.first,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    const Icon(Icons.checkroom),
-                              ),
-                      ),
-                    ),
-                    title: Text(item.name),
-                    subtitle: Text('${item.type.label} · Size ${item.size}'),
-                  ),
-              ],
-            ),
-          ),
-
-          SectionCard(
-            title: 'Rental schedule',
-            icon: Icons.event_outlined,
-            margin: gap,
-            child: Column(
-              children: [
-                _row('Pick-up', formatDate(b.pickupDate)),
-                _row('Event', formatDate(b.eventDate)),
-                _row('Return', formatDate(b.returnDate)),
-              ],
-            ),
-          ),
-
-          SectionCard(
-            title: 'Payment',
-            icon: Icons.payments_outlined,
-            margin: gap,
-            child: Column(
-              children: [
-                _row('Option', b.paymentOption.label),
-                _row('Total', formatPeso(b.totalAmount)),
-                _row('Paid', formatPeso(b.amountPaid)),
-                _row('Balance', formatPeso(b.balance), bold: true),
-                if (d.payments.isNotEmpty) _row('Method', d.methodsUsed),
-                if (payByText(b) != null) _row('Deadline', payByText(b)!),
-                if (d.payments.isNotEmpty) const Divider(),
-                for (final p in d.payments)
-                  _row(
-                    '${p.kind.label} · ${formatDateOrDash(p.createdAt)}',
-                    formatPeso(p.amount),
-                  ),
-              ],
-            ),
-          ),
-
-          // Phase 3: a booking waiting for payment shows how to pay, with the
-          // GCash number and shop contact numbers pre-filled (the same card as
-          // the "Request submitted" screen).
-          if (b.displayStatus() == BookingStatus.pending)
-            SectionCard(
-              title: 'How to pay',
-              icon: Icons.account_balance_wallet_outlined,
-              margin: gap,
-              child: PaymentInstructions(
-                method: b.preferredPaymentMethod,
-                referenceNo: b.referenceNo,
+                ],
               ),
             ),
 
-          SectionCard(
-            title: 'Rental agreement',
-            icon: Icons.assignment_turned_in_outlined,
-            margin: gap,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Phase 2: the typed signature and the exact agreement.
-                Text(
-                  b.isSigned
-                      ? 'Signed as ${b.signedName}'
-                            '${b.termsAcknowledgedAt == null ? '' : ' on ${Formatters.dateTime(b.termsAcknowledgedAt!)}'}'
-                            '${b.termsVersion == null ? '' : ' (terms version ${b.termsVersion})'}.'
-                      : b.termsAcknowledgedAt == null
-                      ? 'No signed agreement is saved for this booking.'
-                      : 'You agreed to the rental terms on '
-                            '${Formatters.dateTime(b.termsAcknowledgedAt!)}.',
-                ),
-                if (b.preferredFittingDate != null)
-                  Text(
-                    'Preferred fitting date: '
-                    '${formatDate(b.preferredFittingDate!)}',
-                  ),
-                // Signed bookings show the saved form; older ones the
-                // current terms.
-                TextButton(
-                  onPressed: b.termsSnapshot == null
-                      ? () => _showTerms(context)
-                      : () => showSignedAgreement(
-                          context,
-                          snapshot: b.termsSnapshot!,
-                          signedName: b.signedName ?? '',
-                          signedAt: b.termsAcknowledgedAt,
-                          version: b.termsVersion,
-                          customerFullName: b.customerFullName,
-                        ),
-                  child: Text(
-                    b.termsSnapshot == null
-                        ? 'View rental terms'
-                        : 'View signed agreement',
-                  ),
-                ),
-              ],
+            SectionCard(
+              title: 'Rental schedule',
+              icon: Icons.event_outlined,
+              margin: gap,
+              child: Column(
+                children: [
+                  _row('Pick-up', formatDate(b.pickupDate)),
+                  _row('Event', formatDate(b.eventDate)),
+                  _row('Return', formatDate(b.returnDate)),
+                ],
+              ),
             ),
-          ),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Phase 3: a Reserved booking cannot be cancelled by the
-                // customer; this explains why and points to the shop.
-                if (d.showNonRefundableNotice) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      border: Border.all(
-                        color: theme.colorScheme.outlineVariant,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
+            SectionCard(
+              title: 'Payment',
+              icon: Icons.payments_outlined,
+              margin: gap,
+              child: Column(
+                children: [
+                  _row('Option', b.paymentOption.label),
+                  _row('Total', formatPeso(b.totalAmount)),
+                  _row('Paid', formatPeso(b.amountPaid)),
+                  _row('Balance', formatPeso(b.balance), bold: true),
+                  if (d.payments.isNotEmpty) _row('Method', d.methodsUsed),
+                  if (payByText(b) != null) _row('Deadline', payByText(b)!),
+                  if (d.payments.isNotEmpty) const Divider(),
+                  for (final p in d.payments)
+                    _row(
+                      '${p.kind.label} · ${formatDateOrDash(p.createdAt)}',
+                      formatPeso(p.amount),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.info_outline, color: AppColors.maroon),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(BookingDetails.nonRefundableNotice),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                 ],
-                const ContactShopButton(outlined: true),
-                // Phase 3: Pending only (see BookingDetails.canCancel).
-                if (d.canCancel) ...[
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.deepRed,
-                    ),
-                    onPressed: _cancelling ? null : _confirmCancel,
-                    child: _cancelling
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Cancel booking'),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
-        ],
+
+            // Phase 3: a booking waiting for payment shows how to pay, with the
+            // GCash number and shop contact numbers pre-filled (the same card as
+            // the "Request submitted" screen).
+            if (status == BookingStatus.pending)
+              SectionCard(
+                key: _howToPayKey, // target of the status card's "How to pay"
+                title: 'How to pay',
+                icon: Icons.account_balance_wallet_outlined,
+                margin: gap,
+                child: PaymentInstructions(
+                  method: b.preferredPaymentMethod,
+                  referenceNo: b.referenceNo,
+                ),
+              ),
+
+            SectionCard(
+              title: 'Rental agreement',
+              icon: Icons.assignment_turned_in_outlined,
+              margin: gap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Phase 2: the typed signature and the exact agreement.
+                  Text(
+                    b.isSigned
+                        ? 'Signed as ${b.signedName}'
+                              '${b.termsAcknowledgedAt == null ? '' : ' on ${Formatters.dateTime(b.termsAcknowledgedAt!)}'}'
+                              '${b.termsVersion == null ? '' : ' (terms version ${b.termsVersion})'}.'
+                        : b.termsAcknowledgedAt == null
+                        ? 'No signed agreement is saved for this booking.'
+                        : 'You agreed to the rental terms on '
+                              '${Formatters.dateTime(b.termsAcknowledgedAt!)}.',
+                  ),
+                  if (b.preferredFittingDate != null)
+                    Text(
+                      'Preferred fitting date: '
+                      '${formatDate(b.preferredFittingDate!)}',
+                    ),
+                  // Signed bookings show the saved form; older ones the
+                  // current terms.
+                  TextButton(
+                    onPressed: b.termsSnapshot == null
+                        ? () => _showTerms(context)
+                        : () => showSignedAgreement(
+                            context,
+                            snapshot: b.termsSnapshot!,
+                            signedName: b.signedName ?? '',
+                            signedAt: b.termsAcknowledgedAt,
+                            version: b.termsVersion,
+                            customerFullName: b.customerFullName,
+                          ),
+                    child: Text(
+                      b.termsSnapshot == null
+                          ? 'View rental terms'
+                          : 'View signed agreement',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Phase 3: a Reserved booking cannot be cancelled by the
+                  // customer; this explains why and points to the shop.
+                  if (d.showNonRefundableNotice) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: AppColors.maroon,
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(BookingDetails.nonRefundableNotice),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  // While Pending the status card's action is "How to pay", so
+                  // the shop contact stays here; otherwise the status card
+                  // already has it (H8: not shown twice).
+                  if (status == BookingStatus.pending)
+                    const ContactShopButton(outlined: true),
+                  // Phase 3: Pending only (see BookingDetails.canCancel).
+                  if (d.canCancel) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.deepRed,
+                      ),
+                      onPressed: _cancelling ? null : _confirmCancel,
+                      child: _cancelling
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Cancel booking'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  /// Scrolls the "How to pay" card into view (status card action).
+  void _scrollToHowToPay() {
+    final target = _howToPayKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
     );
   }
 
@@ -447,76 +448,26 @@ void _showTerms(BuildContext context) {
   );
 }
 
-/// Vertical timeline. Reached steps have a filled maroon check and their
-/// date; later steps an empty circle and "Not yet".
-class _Timeline extends StatelessWidget {
-  const _Timeline({required this.steps});
+/// Header title: "Booking Details" and, once loaded, "Ref O150-..."
+/// (customer redesign 2: the status itself is in the status card).
+class _HeaderTitle extends StatelessWidget {
+  const _HeaderTitle({this.reference});
 
-  final List<TimelineStep> steps;
+  final String? reference;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (var i = 0; i < steps.length; i++)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: 28,
-                  child: Column(
-                    children: [
-                      Icon(
-                        steps[i].done
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                        color: steps[i].done
-                            ? AppColors.maroon
-                            : theme.colorScheme.onSurfaceVariant,
-                        size: 22,
-                      ),
-                      // Line down to the next step.
-                      if (i < steps.length - 1)
-                        Expanded(
-                          child: Container(
-                            width: 2,
-                            color: steps[i + 1].done
-                                ? AppColors.maroon
-                                : theme.dividerColor,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          steps[i].label,
-                          style: TextStyle(
-                            fontWeight: steps[i].done
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                        Text(
-                          steps[i].done
-                              ? Formatters.dateTime(steps[i].date!)
-                              : 'Not yet',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        const Text('Booking Details', maxLines: 1),
+        if (reference != null)
+          Text(
+            'Ref $reference',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
           ),
       ],
     );
