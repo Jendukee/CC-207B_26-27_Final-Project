@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/features/reservation/models/reservation_draft.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/features/reservation/widgets/reservation_step_indicator.dart';
@@ -42,7 +43,7 @@ class _ReserveMeasurementsScreenState extends State<ReserveMeasurementsScreen> {
     for (final field in _measurementFields.keys) field: TextEditingController(),
   };
   final TextEditingController _notesController = TextEditingController();
-  late final Future<Map<String, dynamic>?> _savedMeasurements;
+  late Future<Map<String, dynamic>?> _savedMeasurements;
   bool _consent = false;
   bool _saving = false;
   bool _controllersInitialized = false;
@@ -167,13 +168,17 @@ class _ReserveMeasurementsScreenState extends State<ReserveMeasurementsScreen> {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
+          // UI audit #12: plain message plus Retry (was a raw exception).
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not load saved measurements: ${snapshot.error}',
-                ),
+            return ErrorView(
+              message: friendlyErrorMessage(
+                snapshot.error!,
+                fallback:
+                    'Could not load your saved measurements. '
+                    'Please try again.',
+              ),
+              onRetry: () => setState(
+                () => _savedMeasurements = _service.loadSavedMeasurements(),
               ),
             );
           }
@@ -200,6 +205,10 @@ class _ReserveMeasurementsScreenState extends State<ReserveMeasurementsScreen> {
                       for (final entry in _measurementFields.entries) ...[
                         TextFormField(
                           controller: _controllers[entry.key],
+                          // UI audit #24: numbers only (max 3 digits and
+                          // 2 decimals), errors shown as the user types.
+                          inputFormatters: Validators.measurementFormatters,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),

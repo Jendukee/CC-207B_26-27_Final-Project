@@ -1,8 +1,11 @@
-// Confirmation for a successfully submitted pending booking.
+// Confirmation for a successfully submitted pending booking: reference
+// number, dates, payment plan and the "Pay by" deadline (UI audit #8).
+// Dates and pesos use the shared Formatters (#23).
+//
+// OWNER: Member 2.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
@@ -19,8 +22,6 @@ class BookingConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat.yMMMMd();
-    final currency = NumberFormat.currency(locale: 'en_PH', symbol: '₱');
     return Scaffold(
       appBar: AppBar(title: const Text('Booking Submitted')),
       body: FutureBuilder<Booking>(
@@ -38,8 +39,12 @@ class BookingConfirmationScreen extends StatelessWidget {
                   children: [
                     const Icon(Icons.error_outline, size: 48),
                     const SizedBox(height: 12),
-                    Text(
-                      'Could not load booking confirmation: ${snapshot.error}',
+                    // UI audit #12: no raw exception text. The booking
+                    // was saved; My Bookings shows it.
+                    const Text(
+                      'Your request was sent, but this page could not load. '
+                      'Open My Bookings to see it.',
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     FilledButton(
@@ -98,15 +103,15 @@ class BookingConfirmationScreen extends StatelessWidget {
                       ),
                       _ConfirmationRow(
                         label: 'Pickup',
-                        value: dateFormat.format(booking.pickupDate),
+                        value: Formatters.date(booking.pickupDate),
                       ),
                       _ConfirmationRow(
                         label: 'Event',
-                        value: dateFormat.format(booking.eventDate),
+                        value: Formatters.date(booking.eventDate),
                       ),
                       _ConfirmationRow(
                         label: 'Return',
-                        value: dateFormat.format(booking.returnDate),
+                        value: Formatters.date(booking.returnDate),
                       ),
                       _ConfirmationRow(
                         label: 'Payment plan',
@@ -114,7 +119,7 @@ class BookingConfirmationScreen extends StatelessWidget {
                       ),
                       _ConfirmationRow(
                         label: 'Planned payment',
-                        value: currency.format(dueAmount),
+                        value: Formatters.peso(dueAmount),
                       ),
                       // UI audit #8: the payment deadline set by
                       // create_reservation (48 h, before pickup day).

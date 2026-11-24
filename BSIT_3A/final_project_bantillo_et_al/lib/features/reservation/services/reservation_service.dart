@@ -41,6 +41,28 @@ class ReservationService {
     return blockedDates.isEmpty;
   }
 
+  /// Every blocked day (reserved / rented-out bookings) of [itemId] between
+  /// [from] and [to], as dates without time. Used to disable taken dates
+  /// in the date picker (UI audit #13).
+  Future<Set<DateTime>> blockedDays({
+    required String itemId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final rows = await _client.rpc(
+      'get_blocked_dates',
+      params: {
+        'p_item_id': itemId,
+        'p_from': _dateFormat.format(from),
+        'p_to': _dateFormat.format(to),
+      },
+    ) as List<dynamic>;
+    return {
+      for (final value in rows)
+        DateTime.parse(value is Map ? value.values.first as String : '$value'),
+    };
+  }
+
   /// The customer's saved measurements (to prefill step 2), or null.
   Future<Map<String, dynamic>?> loadSavedMeasurements() async {
     final userId = _requireUserId();
