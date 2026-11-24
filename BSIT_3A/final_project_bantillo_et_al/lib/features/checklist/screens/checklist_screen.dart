@@ -26,6 +26,7 @@ import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
 import 'package:orange150_rental/core/widgets/section_card.dart';
@@ -315,8 +316,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isRelease ? 'Release Checklist' : 'Return Checklist'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: _isRelease ? 'Release Checklist' : 'Return Checklist',
       ),
       body: _buildBody(),
       bottomNavigationBar: _bottomBar(),
