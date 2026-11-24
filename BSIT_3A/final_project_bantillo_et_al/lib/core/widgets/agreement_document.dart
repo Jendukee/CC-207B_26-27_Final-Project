@@ -212,6 +212,9 @@ Future<void> showSignedAgreement(
   required String signedName,
   required DateTime? signedAt,
   String? version,
+  // The full name submitted with the booking (0012), shown above the
+  // signature line. Null on older bookings.
+  String? customerFullName,
 }) {
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
@@ -223,6 +226,10 @@ Future<void> showSignedAgreement(
           children: [
             AgreementDocument.fromSnapshot(snapshot),
             const Divider(height: 32),
+            if ((customerFullName ?? '').trim().isNotEmpty) ...[
+              Text('Name on booking: $customerFullName'),
+              const SizedBox(height: 4),
+            ],
             Text(
               'Signed as $signedName'
               '${signedAt == null ? '' : ' on ${Formatters.dateTime(signedAt)}'}'
