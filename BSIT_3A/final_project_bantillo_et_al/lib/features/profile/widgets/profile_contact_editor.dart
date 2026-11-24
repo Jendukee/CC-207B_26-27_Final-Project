@@ -1,6 +1,16 @@
+// Dialog to edit the customer's name and mobile number.
+//
+// UI audit #3: the mobile number uses the shared PhoneFormField (digits
+// only, 11 max, 09XXXXXXXXX). An older saved number such as
+// "0917 123 4567" is cleaned up when the dialog opens, and only digits are
+// saved.
+//
+// OWNER: Member 2.
+
 import 'package:flutter/material.dart';
 
 import 'package:orange150_rental/core/utils/validators.dart';
+import 'package:orange150_rental/core/widgets/phone_form_field.dart';
 import 'package:orange150_rental/features/profile/models/profile_data.dart';
 
 /// Opens a validated contact editor and returns the edits if saved.
@@ -34,7 +44,11 @@ class _ProfileContactEditorState extends State<_ProfileContactEditor> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.fullName);
-    _phoneController = TextEditingController(text: widget.phone ?? '');
+    // Clean up older formats ("+63 917 ...") so the field starts valid;
+    // a number that cannot be fixed is kept so the user can correct it.
+    _phoneController = TextEditingController(
+      text: Validators.normalizePhone(widget.phone) ?? widget.phone ?? '',
+    );
   }
 
   @override
@@ -71,13 +85,10 @@ class _ProfileContactEditorState extends State<_ProfileContactEditor> {
             validator: (value) =>
                 Validators.required(value, fieldName: 'Full name'),
           ),
-          TextFormField(
+          PhoneFormField(
             controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Mobile number (optional)',
-            ),
-            validator: (value) => Validators.phone(value, isRequired: false),
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _save(),
           ),
         ],
       ),
