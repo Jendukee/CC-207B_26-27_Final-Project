@@ -3,10 +3,13 @@
 //   * which checkboxes to show (the garment itself + each inclusion)
 //   * when "Release items" is allowed
 //   * penalty validation (0 or more)
+//   * the late return fee (Phase 3): ₱200 per day after the return date
 // The save_checklist SQL function (0003) checks the same rules again.
 //
 // OWNER: Member 3.
 
+import 'package:orange150_rental/core/config/rental_terms.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/features/checklist/models/checklist_booking.dart';
 
@@ -118,4 +121,54 @@ abstract final class ChecklistRules {
   /// The penalty as a number (0 when the field is empty or invalid).
   static double parsePenalty(String? value) =>
       double.tryParse((value ?? '').trim()) ?? 0;
+
+  // ---------------------------------------------------------------------------
+  // Late return fee (Phase 3, rental term 5: ₱200 per extra day)
+  // ---------------------------------------------------------------------------
+
+  /// Whole calendar days between [returnDate] and the day of [returnedOn]
+  /// (0 when returned on or before the return date). Times are ignored,
+  /// so returning at 11 pm on the return date is still on time.
+  static int lateDays({
+    required DateTime returnDate,
+    required DateTime returnedOn,
+  }) {
+    // UTC dates: whole days, no daylight-saving surprises.
+    final due = DateTime.utc(returnDate.year, returnDate.month, returnDate.day);
+    final back = DateTime.utc(
+      returnedOn.year,
+      returnedOn.month,
+      returnedOn.day,
+    );
+    final days = back.difference(due).inDays;
+    return days < 0 ? 0 : days;
+  }
+
+  /// The late fee to pre-fill: [lateDays] x [RentalTerms.lateFeePerDay].
+  static double lateFee({
+    required DateTime returnDate,
+    required DateTime returnedOn,
+  }) =>
+      lateDays(returnDate: returnDate, returnedOn: returnedOn) *
+      RentalTerms.lateFeePerDay;
+
+  /// How the pre-filled fee was worked out, shown under the penalty field:
+  /// "2 days late (due Nov 25, 2026) × ₱200.00 = ₱400.00." or
+  /// "Returned on time (due Nov 25, 2026): no late fee."
+  static String lateFeeExplanation({
+    required DateTime returnDate,
+    required DateTime returnedOn,
+  }) {
+    final days = lateDays(returnDate: returnDate, returnedOn: returnedOn);
+    final due = Formatters.date(returnDate);
+    if (days == 0) return 'Returned on time (due $due): no late fee.';
+    return '$days ${days == 1 ? 'day' : 'days'} late (due $due) × '
+        '${Formatters.peso(RentalTerms.lateFeePerDay)} = '
+        '${Formatters.peso(days * RentalTerms.lateFeePerDay)}.';
+  }
+
+  /// The penalty field text for a fee: "400" or "0" (no trailing ".0").
+  static String penaltyText(double amount) => amount == amount.roundToDouble()
+      ? amount.toStringAsFixed(0)
+      : amount.toStringAsFixed(2);
 }
