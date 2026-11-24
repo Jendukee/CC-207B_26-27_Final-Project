@@ -22,9 +22,12 @@ void main() {
       expect(Validators.email('ana@example.com'), isNull);
     });
 
-    test('phone accepts PH mobile formats', () {
-      expect(Validators.phone('0917 123 4567'), isNull);
-      expect(Validators.phone('+639171234567'), isNull);
+    // Phone rules changed in the UI audit: only 09XXXXXXXXX is accepted.
+    // Full cases are in test/core/phone_validator_test.dart.
+    test('phone accepts only 09XXXXXXXXX', () {
+      expect(Validators.phone('09171234567'), isNull);
+      expect(Validators.phone('0917 123 4567'), isNotNull);
+      expect(Validators.phone('+639171234567'), isNotNull);
       expect(Validators.phone('12345'), isNotNull);
       expect(Validators.phone('', isRequired: false), isNull);
     });
