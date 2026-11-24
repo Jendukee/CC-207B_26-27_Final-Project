@@ -25,8 +25,8 @@ abstract final class RouteNames {
 
   // Reservation flow, full screen (Member 2)
   static const String reserveDates = 'reserveDates';
-  static const String reserveMeasurements = 'reserveMeasurements';
-  static const String reserveReview = 'reserveReview';
+  // reserveMeasurements / reserveReview removed: their screens were deleted
+  // in Phase 2 (reserveDates stays for the redirect route).
   static const String bookingConfirmation = 'bookingConfirmation';
 
   // Staff shell (Member 1 + Member 3)
@@ -60,9 +60,7 @@ abstract final class RoutePaths {
   static const String profile = '/profile';
 
   static const String reservePrefix = '/reserve';
-  static const String reserveDates = '/reserve/:itemId/dates';
-  static const String reserveMeasurements = '/reserve/:itemId/measurements';
-  static const String reserveReview = '/reserve/:itemId/review';
+  static const String reserveDates = '/reserve/:itemId/dates'; // redirect only
   static const String bookingConfirmationPrefix = '/booking-confirmation';
   static const String bookingConfirmation = '/booking-confirmation/:bookingId';
 
