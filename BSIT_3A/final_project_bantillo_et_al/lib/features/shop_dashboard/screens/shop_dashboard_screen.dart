@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/features/shop_dashboard/models/dashboard_booking.dart';
 import 'package:orange150_rental/features/shop_dashboard/models/dashboard_section.dart';
 import 'package:orange150_rental/features/shop_dashboard/services/shop_dashboard_service.dart';
@@ -76,8 +77,9 @@ class _ShopDashboardScreenState extends State<ShopDashboardScreen> {
   Widget build(BuildContext context) {
     final name = SessionController.instance.user?.fullName;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dashboard'),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(
+        title: 'Dashboard',
         actions: [
           IconButton(
             tooltip: 'Refresh',

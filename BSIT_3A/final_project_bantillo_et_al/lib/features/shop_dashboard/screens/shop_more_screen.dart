@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/services/session_controller.dart';
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/features/shop_dashboard/shop_dashboard_routes.dart';
 import 'package:orange150_rental/shared/models/app_user.dart';
 
@@ -58,7 +59,8 @@ class ShopMoreScreen extends StatelessWidget {
     final role = user?.role == UserRole.owner ? 'Owner' : 'Staff';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('More')),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: const BrandAppBar(title: 'More'),
       body: ListView(
         children: [
           ListTile(

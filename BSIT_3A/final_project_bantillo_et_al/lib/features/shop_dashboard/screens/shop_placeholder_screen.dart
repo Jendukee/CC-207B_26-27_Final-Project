@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 
 /// A titled page that explains a feature is not built yet.
@@ -29,7 +30,8 @@ class ShopPlaceholderScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      // Customer redesign 2: shared header with the Orange 150 mark (H4).
+      appBar: BrandAppBar(title: title),
       body: EmptyView(icon: icon, message: message),
     );
   }
