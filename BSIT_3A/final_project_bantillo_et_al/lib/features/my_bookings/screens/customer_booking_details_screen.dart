@@ -5,6 +5,8 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:orange150_rental/core/widgets/error_view.dart';
+
 import 'package:orange150_rental/features/my_bookings/models/booking_details.dart';
 import 'package:orange150_rental/features/my_bookings/services/my_bookings_service.dart';
 import 'package:orange150_rental/features/my_bookings/widgets/booking_formatters.dart';
@@ -89,8 +91,12 @@ class _CustomerBookingDetailsScreenState
           if (snap.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
+          // UI audit #15: the error state now has a Retry button.
           if (snap.hasError) {
-            return const Center(child: Text('Could not load this booking.'));
+            return ErrorView(
+              message: 'Could not load this booking. Please try again.',
+              onRetry: () => setState(() => _future = _load()),
+            );
           }
           final d = snap.data!;
           final b = d.booking;
@@ -102,7 +108,7 @@ class _CustomerBookingDetailsScreenState
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: BookingStatusBadge(status: b.status),
+                    child: BookingStatusBadge(status: b.displayStatus()),
                   ),
                 ],
               ),
@@ -131,7 +137,9 @@ class _CustomerBookingDetailsScreenState
                     const Text('No payments recorded yet.'),
                   for (final p in d.payments)
                     Text(
-                      '${formatPeso(p.amount)} • ${p.kind.label} • ${p.method}'
+                      // methodLabel: "GCash", not the database value "gcash".
+                      '${formatPeso(p.amount)} • ${p.kind.label} • '
+                      '${p.methodLabel}'
                       ' • ${formatDateOrDash(p.createdAt)}',
                     ),
                 ],

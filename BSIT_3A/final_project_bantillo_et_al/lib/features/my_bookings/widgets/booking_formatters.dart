@@ -18,34 +18,14 @@ String? payByText(Booking b, {DateTime? now}) {
   return 'Pay by ${Formatters.dateTime(deadline)}';
 }
 
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+// UI audit #23: these now call the shared core Formatters, so dates and
+// pesos look the same on every screen of the app.
 
 /// e.g. "Dec 5, 2026".
-String formatDate(DateTime d) => '${_months[d.month - 1]} ${d.day}, ${d.year}';
+String formatDate(DateTime d) => Formatters.date(d);
 
 /// Same as [formatDate] but shows an en dash for null.
 String formatDateOrDash(DateTime? d) => d == null ? '–' : formatDate(d);
 
 /// e.g. "₱1,500.00".
-String formatPeso(num amount) {
-  final fixed = amount.toStringAsFixed(2);
-  final parts = fixed.split('.');
-  final whole = parts[0].replaceAllMapped(
-    RegExp(r'\B(?=(\d{3})+(?!\d))'),
-    (_) => ',',
-  );
-  return '₱$whole.${parts[1]}';
-}
+String formatPeso(num amount) => Formatters.peso(amount);
