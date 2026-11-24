@@ -1,3 +1,8 @@
+// Profile data models: contact details (incl. the optional address,
+// migration 0011), privacy consent and saved measurements.
+//
+// OWNER: Member 2.
+
 /// Contact and consent information, plus saved fit measurements.
 class ProfileData {
   const ProfileData({
@@ -5,6 +10,7 @@ class ProfileData {
     required this.fullName,
     required this.email,
     this.phone,
+    this.address,
     this.privacyConsentAt,
     this.measurements,
   });
@@ -20,6 +26,8 @@ class ProfileData {
       fullName: profile['full_name'] as String? ?? '',
       email: email ?? '',
       phone: profile['phone'] as String?,
+      // Optional address (migration 0011).
+      address: profile['address'] as String?,
       privacyConsentAt: profile['privacy_consent_at'] == null
           ? null
           : DateTime.parse(profile['privacy_consent_at'].toString()),
@@ -33,6 +41,9 @@ class ProfileData {
   final String fullName;
   final String email;
   final String? phone;
+
+  /// Optional address, used to pre-fill the checkout (0011).
+  final String? address;
   final DateTime? privacyConsentAt;
   final ProfileMeasurements? measurements;
 
@@ -41,10 +52,17 @@ class ProfileData {
 
 /// Edited contact values returned by the profile form.
 class ProfileContactUpdate {
-  const ProfileContactUpdate({required this.fullName, this.phone});
+  const ProfileContactUpdate({
+    required this.fullName,
+    this.phone,
+    this.address,
+  });
 
   final String fullName;
   final String? phone;
+
+  /// Optional address, used to pre-fill the checkout (0011).
+  final String? address;
 }
 
 /// One customer's saved body measurements, all in inches.
