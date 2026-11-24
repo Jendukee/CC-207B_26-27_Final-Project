@@ -36,10 +36,14 @@ class _ReserveDatesScreenState extends State<ReserveDatesScreen> {
 
   Future<void> _chooseDate(Item item) async {
     final today = DateUtils.dateOnly(DateTime.now());
+    // UI audit #8: earliest event is 2 days away, so pick-up is tomorrow
+    // or later and the 48-hour payment deadline ends before pick-up day
+    // (same rule as create_reservation in the database).
+    final earliest = ReservationService.earliestEventDate(today);
     final selectedDate = await showDatePicker(
       context: context,
-      initialDate: _eventDate ?? today.add(const Duration(days: 1)),
-      firstDate: today.add(const Duration(days: 1)),
+      initialDate: _eventDate ?? earliest,
+      firstDate: earliest,
       lastDate: DateTime(today.year + 2, today.month, today.day),
       helpText: 'Choose the event date',
     );
@@ -111,8 +115,8 @@ class _ReserveDatesScreenState extends State<ReserveDatesScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Choose your event date. Pickup is the day before, and '
-                      'return is the day after.',
+                      'Choose your event date, at least 2 days from today. '
+                      'Pickup is the day before, and return is the day after.',
                     ),
                     const SizedBox(height: 20),
                     Card(

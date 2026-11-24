@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/features/reservation/models/reservation_draft.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/features/reservation/widgets/reservation_step_indicator.dart';
@@ -57,8 +58,17 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
+      // create_reservation's own messages (e.g. "These dates were just
+      // booked...") are shown as-is; anything else gets a plain message.
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not submit reservation: $error')),
+        SnackBar(
+          content: Text(
+            friendlyErrorMessage(
+              error,
+              fallback: 'Could not submit your reservation. Please try again.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -198,7 +208,9 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
                           'instructions. Your selected payment plan and '
                           'measurement snapshot will be attached to this '
                           'reservation. This request is pending until the shop '
-                          'confirms it; submitting does not process a payment.',
+                          'confirms it; submitting does not process a payment. '
+                          'Pay within 48 hours (and before the pickup day) or '
+                          'the request expires.',
                         ),
                       ),
                     ),

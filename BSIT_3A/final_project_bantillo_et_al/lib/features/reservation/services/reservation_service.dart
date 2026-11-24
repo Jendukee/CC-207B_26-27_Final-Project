@@ -68,9 +68,21 @@ class ReservationService {
     });
   }
 
-  /// Creates a pending booking and its booking_items row, then returns it.
+  /// Earliest event date a customer can choose: 2 days from today, so the
+  /// pick-up (day before) is tomorrow or later and the 48-hour payment
+  /// deadline ends before pick-up day (see 0009_create_reservation.sql).
+  static DateTime earliestEventDate([DateTime? now]) {
+    final base = now ?? DateTime.now();
+    return DateTime(base.year, base.month, base.day + 2);
+  }
+
+  /// Creates a pending booking with its item and returns it.
   ///
-  /// The database trigger derives the item's rental period from the booking.
+  /// UI audit #8: everything happens in ONE database function,
+  /// create_reservation (0009_create_reservation.sql). It takes the price
+  /// from the items table, checks the dates are still free, sets the
+  /// payment deadline (expires_at) and inserts the booking and its item
+  /// together, so a half-saved booking can no longer be left behind.
   Future<Booking> submitReservation({
     required String itemId,
     required DateTime eventDate,
@@ -78,58 +90,18 @@ class ReservationService {
     required Map<String, dynamic> measurementsSnapshot,
     required String termsVersion,
   }) async {
-    final userId = _requireUserId();
-    final item = await _client
-        .from('items')
-        .select('price, condition')
-        .eq('id', itemId)
-        .single();
-    if (item['condition'] != 'available') {
-      throw StateError('This item is no longer available to rent.');
-    }
-    final price = (item['price'] as num).toDouble();
-
-    if (!await isItemAvailable(itemId: itemId, eventDate: eventDate)) {
-      throw StateError(
-        'This item is no longer available for the selected rental dates.',
-      );
-    }
-
-    final pickupDate = DateTime(
-      eventDate.year,
-      eventDate.month,
-      eventDate.day - 1,
+    _requireUserId();
+    final row = await _client.rpc<Map<String, dynamic>>(
+      'create_reservation',
+      params: {
+        'p_item_id': itemId,
+        'p_event_date': _dateFormat.format(eventDate),
+        'p_payment_option': paymentOption.dbValue,
+        'p_measurements': measurementsSnapshot,
+        'p_terms_version': termsVersion,
+      },
     );
-    final returnDate = DateTime(
-      eventDate.year,
-      eventDate.month,
-      eventDate.day + 1,
-    );
-    final bookingRow = await _client
-        .from('bookings')
-        .insert({
-          'customer_id': userId,
-          'status': 'pending',
-          'payment_option': paymentOption.dbValue,
-          'total_amount': price,
-          'amount_paid': 0,
-          'pickup_date': _dateFormat.format(pickupDate),
-          'event_date': _dateFormat.format(eventDate),
-          'return_date': _dateFormat.format(returnDate),
-          'measurements_snapshot': measurementsSnapshot,
-          'terms_version': termsVersion,
-          'terms_acknowledged_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .select()
-        .single();
-
-    await _client.from('booking_items').insert({
-      'booking_id': bookingRow['id'],
-      'item_id': itemId,
-      'price': price,
-    });
-
-    return Booking.fromMap(bookingRow);
+    return Booking.fromMap(row);
   }
 
   /// Loads a booking for the confirmation screen.

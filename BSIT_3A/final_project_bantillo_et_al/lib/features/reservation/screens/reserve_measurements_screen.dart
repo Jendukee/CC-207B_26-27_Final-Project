@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/features/reservation/models/reservation_draft.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
@@ -68,15 +69,43 @@ class _ReserveMeasurementsScreenState extends State<ReserveMeasurementsScreen> {
       if (value != null) _controllers[field]!.text = value.toString();
     }
     _notesController.text = saved?['notes'] as String? ?? '';
+    // Saved measurements were shared with consent before, so keep it ticked.
+    _consent = saved?['consent_at'] != null;
     _controllersInitialized = true;
+  }
+
+  /// True when at least one measurement or the notes field is filled in.
+  bool get _hasAnyValue =>
+      _controllers.values.any((c) => c.text.trim().isNotEmpty) ||
+      _notesController.text.trim().isNotEmpty;
+
+  /// Opens the review step with [measurements] attached to the draft.
+  void _openReview(Map<String, dynamic> measurements) {
+    context.pushNamed(
+      RouteNames.reserveReview,
+      pathParameters: {'itemId': widget.itemId},
+      extra: widget.draft!.withMeasurements(measurements),
+    );
   }
 
   Future<void> _continue() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // UI audit #7: measurements are optional. With every field blank the
+    // customer continues WITHOUT sharing (no consent needed, nothing saved).
+    if (!_hasAnyValue) {
+      _openReview(const {});
+      return;
+    }
+
+    // Consent is only needed when something will actually be shared.
     if (!_consent) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please provide consent to share measurements.'),
+          content: Text(
+            'Tick the consent box to share the measurements you entered, '
+            'or clear the fields to continue without them.',
+          ),
         ),
       );
       return;
@@ -94,16 +123,23 @@ class _ReserveMeasurementsScreenState extends State<ReserveMeasurementsScreen> {
     try {
       await _service.saveMeasurements(measurements);
       if (!mounted) return;
-      context.pushNamed(
-        RouteNames.reserveReview,
-        pathParameters: {'itemId': widget.itemId},
-        extra: widget.draft!.withMeasurements(measurements),
-      );
+      // UI audit #6: stop the spinner BEFORE moving on. Before, _saving
+      // stayed true, so pressing Back from Review left this button
+      // disabled and spinning for good.
+      setState(() => _saving = false);
+      _openReview(measurements);
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save your measurements: $error')),
+        SnackBar(
+          content: Text(
+            friendlyErrorMessage(
+              error,
+              fallback: 'Could not save your measurements. Please try again.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -201,7 +237,9 @@ class _ReserveMeasurementsScreenState extends State<ReserveMeasurementsScreen> {
                           'I consent to sharing these measurements with the shop.',
                         ),
                         subtitle: const Text(
-                          'They will be saved to your account for future reservations.',
+                          'Only needed if you entered measurements. They '
+                          'will be saved to your account for future '
+                          'reservations.',
                         ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
