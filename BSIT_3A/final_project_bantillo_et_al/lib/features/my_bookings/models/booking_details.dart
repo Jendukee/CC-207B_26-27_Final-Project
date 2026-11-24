@@ -46,10 +46,26 @@ class BookingDetails {
   Booking get booking => myBooking.booking;
   List<Item> get items => myBooking.items;
 
-  /// Only pending or reserved bookings can be cancelled.
-  bool get canCancel =>
-      booking.status == BookingStatus.pending ||
-      booking.status == BookingStatus.reserved;
+  /// Phase 3: the customer may cancel ONLY while the booking is Pending
+  /// (not paid yet). Once Reserved the reservation fee is non-refundable
+  /// (rental terms 2 and 9), so only staff can cancel. A pending booking
+  /// past its payment deadline shows as Expired, so it has no Cancel
+  /// either. The database (cancel_my_booking, 0013) checks the same rule.
+  bool get canCancel => customerCanCancel(booking);
+
+  /// True when Cancel is hidden because the booking is Reserved: the
+  /// details screen shows [nonRefundableNotice] instead.
+  bool get showNonRefundableNotice => booking.status == BookingStatus.reserved;
+
+  /// Shown instead of Cancel on a Reserved booking.
+  static const String nonRefundableNotice =
+      'Reservations are non-refundable and cannot be cancelled. Contact the '
+      'shop for concerns.';
+
+  /// The cancel rule as a pure function, so it can be tested. [now] can be
+  /// fixed in tests.
+  static bool customerCanCancel(Booking booking, [DateTime? now]) =>
+      booking.displayStatus(now) == BookingStatus.pending;
 
   /// The four timeline steps, in order.
   List<TimelineStep> get timeline => [
