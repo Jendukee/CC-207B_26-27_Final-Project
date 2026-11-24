@@ -25,6 +25,7 @@ class ShopBookingItem {
     required this.size,
     required this.price,
     this.inclusions = const [],
+    this.photoUrl,
   });
 
   /// Builds a line from `booking_items(price, item:items(...))`.
@@ -37,6 +38,10 @@ class ShopBookingItem {
       size: item['size'] as String? ?? '',
       price: (map['price'] as num? ?? 0).toDouble(),
       inclusions: List<String>.from(item['inclusions'] as List? ?? const []),
+      photoUrl: switch (item['photo_urls']) {
+        final List<dynamic> urls when urls.isNotEmpty => urls.first as String,
+        _ => null,
+      },
     );
   }
 
@@ -57,6 +62,9 @@ class ShopBookingItem {
 
   /// What comes with the item (veil, gloves, ...).
   final List<String> inclusions;
+
+  /// The item's first photo (shop-side redesign: booking cards), or null.
+  final String? photoUrl;
 }
 
 /// A booking with its customer, items and payments.
