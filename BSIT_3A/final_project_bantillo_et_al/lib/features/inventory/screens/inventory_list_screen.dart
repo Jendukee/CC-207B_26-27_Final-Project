@@ -39,7 +39,10 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
     });
 
     try {
-      final items = await _inventoryService.listItems();
+      // UI audit #10: load retired items too, so the "Retired" filter works
+      // and a retired item can be opened and brought back.
+      // _filteredItems hides them unless "Retired" is chosen.
+      final items = await _inventoryService.listItems(includeRetired: true);
 
       if (!mounted) return;
 
@@ -68,8 +71,11 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
           item.size.toLowerCase().contains(search) ||
           item.ageGroup.label.toLowerCase().contains(search);
 
-      final matchesCondition =
-          _selectedCondition == null || item.condition == _selectedCondition;
+      // "All" means all ACTIVE items: retired ones only appear when the
+      // "Retired" filter is chosen.
+      final matchesCondition = _selectedCondition == null
+          ? item.condition != ItemCondition.retired
+          : item.condition == _selectedCondition;
 
       return matchesSearch && matchesCondition;
     }).toList();
@@ -341,7 +347,7 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
               items: [
                 const DropdownMenuItem<ItemCondition?>(
                   value: null,
-                  child: Text('All conditions'),
+                  child: Text('All active items'),
                 ),
                 ...ItemCondition.values.map(
                   (condition) => DropdownMenuItem<ItemCondition?>(
