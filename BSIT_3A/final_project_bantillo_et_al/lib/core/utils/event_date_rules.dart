@@ -6,7 +6,10 @@
 // Blocked days come from the get_blocked_dates RPC (reserved and rented-out
 // bookings only).
 //
-// OWNER: Member 2.
+// Moved from features/reservation/models/ to core/utils/ so catalog and
+// reservation can share it without importing across features.
+//
+// OWNER: team lead (shared logic). Change only via a reviewed PR.
 
 /// Pure helpers for choosing an event date.
 abstract final class EventDateRules {

@@ -29,7 +29,7 @@ import 'package:orange150_rental/features/catalog/services/catalog_service.dart'
 import 'package:orange150_rental/features/catalog/widgets/availability_calendar.dart';
 import 'package:orange150_rental/features/catalog/widgets/photo_carousel.dart';
 import 'package:orange150_rental/features/catalog/widgets/reserve_date_sheet.dart';
-import 'package:orange150_rental/features/reservation/models/event_date_rules.dart';
+import 'package:orange150_rental/core/utils/event_date_rules.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 
 /// The item plus its booked days for the availability calendar.

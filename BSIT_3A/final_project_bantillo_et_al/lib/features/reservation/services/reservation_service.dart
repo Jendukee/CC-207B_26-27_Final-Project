@@ -3,7 +3,7 @@
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:orange150_rental/features/reservation/models/event_date_rules.dart';
+import 'package:orange150_rental/core/utils/event_date_rules.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 

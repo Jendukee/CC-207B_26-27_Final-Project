@@ -19,7 +19,7 @@ import 'package:orange150_rental/core/utils/error_messages.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
-import 'package:orange150_rental/features/reservation/models/event_date_rules.dart';
+import 'package:orange150_rental/core/utils/event_date_rules.dart';
 import 'package:orange150_rental/features/reservation/models/reservation_draft.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/features/reservation/widgets/reservation_step_indicator.dart';
