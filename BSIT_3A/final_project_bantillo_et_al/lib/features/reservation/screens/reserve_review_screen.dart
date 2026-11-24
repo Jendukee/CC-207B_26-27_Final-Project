@@ -1,11 +1,18 @@
 // Reservation step 3: confirm the rental summary and accept the agreement.
+//
+// UI audit changes: friendly errors with Retry (#12), shared date and peso
+// formats (#23), and a line under the disabled Submit button that says
+// why it is disabled; the button no longer looks like a payment (#25).
+//
+// OWNER: Member 2.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/features/reservation/models/reservation_draft.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/features/reservation/widgets/reservation_step_indicator.dart';
@@ -27,8 +34,7 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
   static const String _termsVersion = 'orange150-rental-1.0';
 
   final ReservationService _service = ReservationService();
-  final DateFormat _dateFormat = DateFormat.yMMMMd();
-  late final Future<Item> _itemFuture;
+  late Future<Item> _itemFuture;
   PaymentOption _paymentOption = PaymentOption.full;
   bool _acceptedTerms = false;
   bool _submitting = false;
@@ -100,19 +106,18 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not load reservation details: ${snapshot.error}',
-                ),
+            return ErrorView(
+              message: friendlyErrorMessage(
+                snapshot.error!,
+                fallback:
+                    'Could not load the reservation details. '
+                    'Please try again.',
               ),
+              onRetry: () =>
+                  setState(() => _itemFuture = _service.getItem(widget.itemId)),
             );
           }
           final item = snapshot.requireData;
-          final amountPerPlan = _paymentOption == PaymentOption.full
-              ? item.price
-              : item.price / 2;
           return Column(
             children: [
               const ReservationStepIndicator(step: 3),
@@ -138,20 +143,20 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
                             const SizedBox(height: 12),
                             _SummaryRow(
                               label: 'Pickup',
-                              value: _dateFormat.format(pickupDate),
+                              value: Formatters.date(pickupDate),
                             ),
                             _SummaryRow(
                               label: 'Event',
-                              value: _dateFormat.format(draft.eventDate),
+                              value: Formatters.date(draft.eventDate),
                             ),
                             _SummaryRow(
                               label: 'Return',
-                              value: _dateFormat.format(returnDate),
+                              value: Formatters.date(returnDate),
                             ),
                             const Divider(),
                             _SummaryRow(
                               label: 'Rental total',
-                              value: _currency(item.price),
+                              value: Formatters.peso(item.price),
                             ),
                           ],
                         ),
@@ -175,14 +180,16 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
                             contentPadding: EdgeInsets.zero,
                             value: PaymentOption.full,
                             title: Text(PaymentOption.full.label),
-                            subtitle: Text('${_currency(item.price)} planned'),
+                            subtitle: Text(
+                              '${Formatters.peso(item.price)} planned',
+                            ),
                           ),
                           RadioListTile<PaymentOption>(
                             contentPadding: EdgeInsets.zero,
                             value: PaymentOption.half,
                             title: Text(PaymentOption.half.label),
                             subtitle: Text(
-                              '${_currency(item.price / 2)} planned as the down payment',
+                              '${Formatters.peso(item.price / 2)} planned as the down payment',
                             ),
                           ),
                         ],
@@ -233,22 +240,39 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.all(20),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _acceptedTerms && !_submitting
-                          ? () => _submit(draft)
-                          : null,
-                      child: _submitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(
-                              'Submit reservation (${_currency(amountPerPlan)})',
-                            ),
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // UI audit #25: say WHY the button is disabled.
+                      if (!_acceptedTerms)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'Tick "I have read and agree to the rental '
+                            'agreement" to submit.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: _acceptedTerms && !_submitting
+                              ? () => _submit(draft)
+                              : null,
+                          child: _submitting
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              // No amount on the button: nothing is paid
+                              // in the app, it only sends the request.
+                              : const Text('Submit reservation request'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -258,9 +282,6 @@ class _ReserveReviewScreenState extends State<ReserveReviewScreen> {
       ),
     );
   }
-
-  String _currency(double amount) =>
-      NumberFormat.currency(locale: 'en_PH', symbol: '₱').format(amount);
 }
 
 class _SummaryRow extends StatelessWidget {
