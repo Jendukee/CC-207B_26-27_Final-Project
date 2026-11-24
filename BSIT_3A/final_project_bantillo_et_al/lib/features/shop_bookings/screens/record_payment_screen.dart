@@ -9,6 +9,12 @@
 //   checks the same rules again.
 // * On success: snackbar, then back to the details screen with result true.
 //
+// Shop-side redesign (Phase 2): grey page with sectioned white cards (the
+// booking summary, then "Payment" with kind, amount and method), and the
+// sticky bar shows the balance after this payment on the left and "Save
+// payment" on the right, like the customer checkout (H1, H4). The rules and
+// the save call are unchanged.
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -21,6 +27,7 @@ import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/section_card.dart';
 import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/shop_bookings/models/booking_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/payment_rules.dart';
@@ -180,6 +187,7 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
         booking != null &&
         BookingRules.canRecordPayment(booking.booking);
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: const BrandAppBar(title: 'Record Payment'),
       body: _buildBody(),
@@ -187,6 +195,8 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
       // visible above the keyboard (same widget as the customer checkout).
       bottomNavigationBar: showForm
           ? StickyActionBar(
+              // Phase 2: the live balance after this payment on the left.
+              leading: _balanceAfterSummary(booking.booking),
               action: FilledButton.icon(
                 onPressed: _submitting ? null : _submit,
                 icon: _submitting
@@ -239,13 +249,22 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               _summary(booking),
-              const SizedBox(height: 8),
-              _kindPicker(row),
-              const SizedBox(height: 16),
-              _amountField(row),
-              const SizedBox(height: 16),
-              _methodField(),
-              const SizedBox(height: 16),
+              // Phase 2: the form fields in one white card.
+              SectionCard(
+                title: 'Payment',
+                icon: Icons.payments_outlined,
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _kindPicker(row),
+                    const SizedBox(height: 16),
+                    _amountField(row),
+                    const SizedBox(height: 16),
+                    _methodField(),
+                  ],
+                ),
+              ),
               _runningBalance(row),
               if (_submitError != null) ...[
                 const SizedBox(height: 16),
@@ -364,13 +383,37 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
     );
   }
 
-  /// "Balance after this payment: ₱X", updated live.
-  Widget _runningBalance(Booking row) {
+  /// The balance left after the amount typed so far (same PaymentRules).
+  double _balanceAfter(Booking row) {
     final amount = PaymentRules.parseAmount(_amount.text) ?? 0;
-    final after = PaymentRules.balance(
+    return PaymentRules.balance(
       total: row.totalAmount,
       paid: row.amountPaid + (amount > 0 ? amount : 0),
     );
+  }
+
+  /// "Balance after ₱X" on the left of the sticky bar (Phase 2).
+  Widget _balanceAfterSummary(Booking row) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Balance after', style: theme.textTheme.bodySmall),
+        Text(
+          Formatters.peso(_balanceAfter(row)),
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: AppColors.maroon,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// "Balance after this payment: ₱X", updated live.
+  Widget _runningBalance(Booking row) {
+    final after = _balanceAfter(row);
     final theme = Theme.of(context);
     return Card(
       color: AppColors.goldTint,

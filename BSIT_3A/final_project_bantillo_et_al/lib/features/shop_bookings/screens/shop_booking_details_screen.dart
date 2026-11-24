@@ -20,6 +20,12 @@
 //     returned). The Actions card keeps only the other actions (H1, H2, H8).
 //   No rule changed: the same BookingRules decide which actions exist.
 //
+// Shop-side redesign (Phase 2): grey page, cards in the customer details
+// order (status, customer, item, schedule, payment, signed agreement,
+// measurements), and the actions in a StickyActionBar: one filled button
+// for the next step, the others outlined, Cancel red with a confirmation
+// (H4, H5, H7, H8). The next-step button left the status card.
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -33,6 +39,7 @@ import 'package:orange150_rental/core/widgets/booking_status_card.dart';
 import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/error_view.dart';
 import 'package:orange150_rental/core/widgets/loading_view.dart';
+import 'package:orange150_rental/core/widgets/sticky_action_bar.dart';
 import 'package:orange150_rental/features/shop_bookings/models/booking_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/payment_rules.dart';
 import 'package:orange150_rental/features/shop_bookings/models/shop_booking.dart';
@@ -184,14 +191,33 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final body = _buildBody();
-    if (widget.embedded) return body;
+    final booking = _booking;
+    // Shop-side redesign: the actions in a sticky bottom bar (once loaded).
+    final bar = booking == null || _error != null
+        ? null
+        : _actionBar(booking.booking);
+    final background = Theme.of(context).colorScheme.surfaceContainerLow;
+    if (widget.embedded) {
+      // Side panel: no Scaffold, so the bar goes under the scrolling body.
+      return ColoredBox(
+        color: background,
+        child: Column(
+          children: [
+            Expanded(child: body),
+            ?bar,
+          ],
+        ),
+      );
+    }
     return Scaffold(
+      backgroundColor: background,
       // Customer redesign 2: shared header with the Orange 150 mark (H4):
       // only the title and the reference number.
       appBar: BrandAppBar(
         titleWidget: _HeaderTitle(reference: _booking?.booking.referenceNo),
       ),
       body: body,
+      bottomNavigationBar: bar,
     );
   }
 
@@ -215,17 +241,21 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
               constraints.maxWidth >=
               ShopBookingDetailsScreen.twoColumnBreakpoint;
 
+          // Shop-side redesign: the customer details order, i.e. status,
+          // customer, item, schedule, payment, signed agreement (then the
+          // measurements staff need at fitting). The actions are in the
+          // sticky bar, not in a card.
           final left = [
             _statusCard(booking),
             _customerSection(booking),
-            _measurementsSection(booking.booking),
             _itemsSection(booking),
-            _contractSection(booking.booking),
+            _scheduleSection(booking.booking),
           ];
           final right = [
-            _actionsSection(booking.booking),
             _paymentSection(booking.booking),
             _historySection(booking),
+            _contractSection(booking.booking),
+            _measurementsSection(booking.booking),
           ];
 
           return SingleChildScrollView(
@@ -240,8 +270,7 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
                       Expanded(child: Column(children: right)),
                     ],
                   )
-                // Phones: actions right after the header.
-                : Column(children: [left.first, ...right, ...left.skip(1)]),
+                : Column(children: [...left, ...right]),
           );
         },
       ),
@@ -261,7 +290,8 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
       nextStep: StaffStatusText.nextStep(row, status),
       deadline: status == BookingStatus.pending ? row.expiresAt : null,
       steps: booking.timeline,
-      action: _primaryAction(row),
+      // Shop-side redesign: the next-step button moved to the sticky bar
+      // with the other actions, so it is not shown twice (H8).
       margin: const EdgeInsets.only(bottom: 12),
     );
     if (!widget.embedded) return card; // the reference is in the header
@@ -381,11 +411,11 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
     );
   }
 
-  /// Items and rental dates.
+  /// The booked items (shop-side redesign: its own "Item" card, as on the
+  /// customer details).
   Widget _itemsSection(ShopBooking booking) {
-    final row = booking.booking;
     return DetailSection(
-      title: 'Items and dates',
+      title: 'Item',
       icon: Icons.checkroom_outlined,
       children: [
         if (booking.items.isEmpty) const Text('No items on this booking.'),
@@ -394,7 +424,17 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
             label: '${item.name} (${item.type.label}, size ${item.size})',
             value: Formatters.peso(item.price),
           ),
-        const Divider(),
+      ],
+    );
+  }
+
+  /// Pick-up, event and return dates ("Rental schedule", as on the
+  /// customer details).
+  Widget _scheduleSection(Booking row) {
+    return DetailSection(
+      title: 'Rental schedule',
+      icon: Icons.event_outlined,
+      children: [
         DetailRow(label: 'Pick-up', value: Formatters.date(row.pickupDate)),
         DetailRow(label: 'Event', value: Formatters.date(row.eventDate)),
         DetailRow(label: 'Return', value: Formatters.date(row.returnDate)),
@@ -508,57 +548,70 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
     );
   }
 
-  /// The OTHER actions allowed right now. Customer redesign 2: the primary
-  /// one (the next step) is on the status card, so it is not repeated here.
-  Widget _actionsSection(Booking booking) {
-    final status = BookingRules.effectiveStatus(booking);
-    final buttons = <Widget>[
-      // UI audit #31: only ONE filled (primary) button. While a balance is
-      // owed, "Record balance payment" is primary (status card) and this
-      // is outlined.
+  /// Shop-side redesign (Phase 2): the staff actions in a sticky bottom
+  /// bar, always reachable (H7): ONE filled button for the next step
+  /// (_primaryAction, same BookingRules as before), and the other actions
+  /// as outlined buttons above it; Cancel is red and still asks first (H5).
+  /// Null when no action is allowed (returned, cancelled, expired).
+  Widget? _actionBar(Booking booking) {
+    final primary = _primaryAction(booking);
+    final secondary = <Widget>[
+      // UI audit #31: only ONE filled button. While a balance is owed,
+      // "Record balance payment" is primary and this one is outlined.
       if (BookingRules.canMarkPickedUp(booking) &&
           BookingRules.canRecordPayment(booking))
-        OutlinedButton.icon(
+        OutlinedButton(
           onPressed: _busy ? null : _markPickedUp,
-          icon: const Icon(Icons.outbox_outlined),
-          label: const Text('Mark picked up'),
+          child: const Text('Mark picked up'),
         ),
       if (BookingRules.canCancel(booking))
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(foregroundColor: AppColors.deepRed),
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.deepRed,
+            side: const BorderSide(color: AppColors.deepRed),
+          ),
           onPressed: _busy ? null : () => _cancel(booking),
-          icon: _busy
+          child: _busy
               ? const SizedBox.square(
                   dimension: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.cancel_outlined),
-          label: const Text('Cancel booking'),
+              : const Text('Cancel booking'),
         ),
     ];
+    if (primary == null && secondary.isEmpty) return null;
 
-    return DetailSection(
-      title: 'Actions',
-      icon: Icons.bolt_outlined,
+    return StickyActionBar(
+      // Why the items cannot be released yet (H1, H9).
+      message: BookingRules.canMarkPickedUp(booking) && booking.balance > 0
+          ? 'Collect the ${Formatters.peso(booking.balance)} balance before '
+                'releasing the items.'
+          : null,
+      // Balance on the left, like Record payment and the checklists.
+      leading: _balanceSummary(booking),
+      // With no next step, the last other action takes the main place.
+      secondary: primary == null
+          ? secondary.sublist(0, secondary.length - 1)
+          : secondary,
+      action: primary ?? secondary.last,
+    );
+  }
+
+  /// "Balance ₱875.00" (or "Fully paid") for the bar's left side.
+  Widget _balanceSummary(Booking booking) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (buttons.isEmpty)
-          Text(
-            _primaryAction(booking) == null
-                ? 'No actions available for ${status.label} bookings.'
-                : 'The next step is on the Booking status card.',
+        Text('Balance', style: theme.textTheme.bodySmall),
+        Text(
+          booking.balance > 0 ? Formatters.peso(booking.balance) : 'Paid',
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: booking.balance > 0 ? AppColors.deepRed : AppColors.success,
+            fontWeight: FontWeight.bold,
           ),
-        if (BookingRules.canMarkPickedUp(booking) && booking.balance > 0)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: NoticeBox(
-              icon: Icons.info_outline,
-              color: AppColors.warningOrange,
-              text:
-                  'Balance of ${Formatters.peso(booking.balance)} must be '
-                  'paid before the items can be released.',
-            ),
-          ),
-        Wrap(spacing: 8, runSpacing: 8, children: buttons),
+        ),
       ],
     );
   }
