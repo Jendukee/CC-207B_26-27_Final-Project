@@ -320,6 +320,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentOption: _option,
         measurementsSnapshot: snapshotMeasurements,
         termsVersion: RentalTerms.version,
+        // Card 1's name: the database checks the signature against
+        // it (0012), not against the profile name.
+        fullName: _name.text,
         signedName: _signature.text,
         termsAcknowledgedAt: signedAt,
         termsSnapshot: form.toSnapshot(
