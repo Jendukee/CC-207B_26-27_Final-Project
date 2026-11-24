@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/features/reservation/services/reservation_service.dart';
 import 'package:orange150_rental/shared/models/booking.dart';
 
@@ -115,14 +116,28 @@ class BookingConfirmationScreen extends StatelessWidget {
                         label: 'Planned payment',
                         value: currency.format(dueAmount),
                       ),
+                      // UI audit #8: the payment deadline set by
+                      // create_reservation (48 h, before pickup day).
+                      if (booking.expiresAt != null)
+                        _ConfirmationRow(
+                          label: 'Pay by',
+                          value: Formatters.dateTime(booking.expiresAt!),
+                          emphasize: true,
+                        ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'No payment was collected in the app. Please wait for the shop '
-                'to confirm your request and payment arrangements.',
+              Text(
+                booking.expiresAt == null
+                    ? 'No payment was collected in the app. Please wait for '
+                          'the shop to confirm your request and payment '
+                          'arrangements.'
+                    : 'No payment was collected in the app. Pay the shop by '
+                          '${Formatters.dateTime(booking.expiresAt!)} to '
+                          'reserve your dates; after that the request '
+                          'expires.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -143,10 +158,17 @@ class BookingConfirmationScreen extends StatelessWidget {
 }
 
 class _ConfirmationRow extends StatelessWidget {
-  const _ConfirmationRow({required this.label, required this.value});
+  const _ConfirmationRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
 
   final String label;
   final String value;
+
+  /// Bold value (used for the payment deadline).
+  final bool emphasize;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -155,7 +177,15 @@ class _ConfirmationRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label),
-        Flexible(child: Text(value, textAlign: TextAlign.end)),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: emphasize
+                ? const TextStyle(fontWeight: FontWeight.bold)
+                : null,
+          ),
+        ),
       ],
     ),
   );
