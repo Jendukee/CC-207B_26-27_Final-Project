@@ -1,4 +1,17 @@
+// Staff inventory: search, condition filter, item cards and Add Item.
+//
+// UI audit changes: retired items can be reached (#10), errors are plain
+// language (#12), the condition chip uses readable AppColors with white
+// text (#19), long descriptions no longer overflow the card (#22), and
+// prices use the shared Formatters (#23).
+//
+// OWNER: Member 1.
+
 import 'package:flutter/material.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
+import 'package:orange150_rental/core/utils/error_messages.dart';
+import 'package:orange150_rental/core/utils/formatters.dart';
+import 'package:orange150_rental/core/widgets/status_chip.dart';
 import 'package:orange150_rental/shared/models/item.dart';
 import 'package:orange150_rental/features/inventory/services/inventory_service.dart';
 import 'package:orange150_rental/features/inventory/screens/item_form_screen.dart';
@@ -54,7 +67,10 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = friendlyErrorMessage(
+          e,
+          fallback: 'Check your connection and try again.',
+        );
         _isLoading = false;
       });
     }
@@ -90,24 +106,23 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
     await _loadItems();
   }
 
-  String _formatPrice(double price) {
-    return '₱${price.toStringAsFixed(2)}';
-  }
+  /// "₱3,500.00" (shared format, UI audit #23).
+  String _formatPrice(double price) => Formatters.peso(price);
 
+  /// Chip colors dark enough for white text (UI audit #19), the same
+  /// palette as the booking status chips.
   Color _conditionColor(ItemCondition condition) {
     switch (condition) {
       case ItemCondition.available:
-        return Colors.green;
+        return AppColors.success;
       case ItemCondition.cleaningRepair:
-        return Colors.orange;
+        return AppColors.warningOrange;
       case ItemCondition.retired:
-        return Colors.grey;
+        return AppColors.neutralGrey;
     }
   }
 
   Widget _buildItemCard(Item item) {
-    final conditionColor = _conditionColor(item.condition);
-
     return Card(
       clipBehavior: Clip.antiAlias,
       margin: const EdgeInsets.only(bottom: 16),
@@ -140,6 +155,8 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
                     Expanded(
                       child: Text(
                         item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -167,31 +184,26 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: conditionColor.withAlpha(30),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    item.condition.label,
-                    style: TextStyle(
-                      color: conditionColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                StatusChip(
+                  label: item.condition.label,
+                  color: _conditionColor(item.condition),
                 ),
+                // UI audit #22: the card has a fixed height, so long text
+                // is cut with "..." instead of overflowing.
                 if (item.description.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Text(item.description),
+                  Text(
+                    item.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
                 if (item.inclusions.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(
                     'Inclusions: ${item.inclusions.join(", ")}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: Colors.grey.shade700),
                   ),
                 ],
