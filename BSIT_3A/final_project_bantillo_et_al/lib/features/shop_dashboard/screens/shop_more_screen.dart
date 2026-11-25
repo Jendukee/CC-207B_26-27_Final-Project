@@ -1,7 +1,8 @@
 // "More" tab of the staff shell:
 //   * who is signed in (name, email, role)
 //   * Reports
-//   * Shop settings and Staff accounts (placeholder pages for now)
+//   * Shop settings (owner edits, staff view)
+//   * Staff accounts (owner only; staff see a message there)
 //   * Sign out, through the existing SessionController (not modified)
 //
 // Shop-side redesign (Phase 2): laid out like the customer "Me" page, on a
@@ -72,7 +73,12 @@ class ShopMoreScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: theme.colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
-      appBar: const BrandAppBar(title: 'More'),
+      appBar: const BrandAppBar(
+        title: 'More',
+        backgroundColor: AppColors.maroonDeep, // as on the Dashboard
+        showLogo: false, // no hanger mark on staff headers
+        titleSpacing: 40, // same title position as the Dashboard
+      ),
       body: ListView(
         padding: const EdgeInsets.only(top: 8, bottom: 24),
         children: [
@@ -126,14 +132,16 @@ class ShopMoreScreen extends StatelessWidget {
                 _tile(
                   Icons.settings_outlined,
                   'Shop settings',
-                  'Coming soon',
+                  // Was "Coming soon"; the screen is real now.
+                  'Contact numbers, hours, payment window, late fee',
                   () => context.goNamed(ShopMoreRoutes.settingsName),
                 ),
                 const Divider(height: 1),
                 _tile(
                   Icons.badge_outlined,
                   'Staff accounts',
-                  'Coming soon',
+                  // Was "Coming soon"; the screen is real now.
+                  'Add or remove staff (owner only)',
                   () => context.goNamed(ShopMoreRoutes.staffName),
                 ),
               ],

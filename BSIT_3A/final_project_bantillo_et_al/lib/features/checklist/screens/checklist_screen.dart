@@ -20,6 +20,9 @@
 // cards, and the sticky bar shows the balance (release) or the penalty
 // (return) on the left and the main action on the right (H1, H4).
 //
+// Shop settings (0016): the return checklist's late fee uses the owner's
+// late fee per day (ShopSettingsService) instead of a fixed ₱200.
+//
 // OWNER: Member 3.
 
 import 'package:flutter/material.dart';
@@ -27,6 +30,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
+import 'package:orange150_rental/core/services/shop_settings_service.dart';
 import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/utils/formatters.dart';
 import 'package:orange150_rental/core/utils/validators.dart';
@@ -82,6 +86,10 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   /// True once the late fee was put in the penalty field (Phase 3).
   bool _penaltyPrefilled = false;
 
+  /// Shop settings (0016): the late fee per day set by the owner (the
+  /// shop_contact / rental_terms default ₱200 if the settings cannot load).
+  double _lateFeePerDay = ShopSettingsService.instance.current.lateFeePerDay;
+
   // Loading the booking.
   ChecklistBooking? _booking;
   List<InclusionLine> _lines = const [];
@@ -135,6 +143,8 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   Future<void> _fetch() async {
     try {
       final booking = await _service.loadBooking(widget.bookingId);
+      // Shop settings: never throws (falls back to the default fee).
+      final settings = await ShopSettingsService.instance.load();
       if (!mounted) return;
       final lines = ChecklistRules.buildLines(booking.items);
       setState(() {
@@ -142,14 +152,17 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
         _lines = lines;
         _ticked.retainAll(lines.map((l) => l.key));
         _loading = false;
-        // Phase 3: pre-fill the late fee ONCE (₱200 per day after the
-        // return date). Staff may still edit it; a reload keeps their edit.
+        _lateFeePerDay = settings.lateFeePerDay;
+        // Phase 3: pre-fill the late fee ONCE (the shop's fee per day after
+        // the return date, from shop settings; was a fixed ₱200). Staff may
+        // still edit it; a reload keeps their edit.
         if (!_isRelease && !_penaltyPrefilled) {
           _penaltyPrefilled = true;
           _penalty.text = ChecklistRules.penaltyText(
             ChecklistRules.lateFee(
               returnDate: booking.booking.returnDate,
               returnedOn: DateTime.now(),
+              perDay: _lateFeePerDay,
             ),
           );
         }
@@ -324,6 +337,9 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(
+        // Staff header: dark maroon, as on the Dashboard.
+        backgroundColor: AppColors.maroonDeep,
+        showLogo: false, // no hanger mark on staff headers
         title: _isRelease ? 'Release Checklist' : 'Return Checklist',
       ),
       body: _buildBody(),
@@ -555,7 +571,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Late fee: ${ChecklistRules.lateFeeExplanation(returnDate: _booking!.booking.returnDate, returnedOn: DateTime.now())}',
+                  'Late fee: ${ChecklistRules.lateFeeExplanation(returnDate: _booking!.booking.returnDate, returnedOn: DateTime.now(), perDay: _lateFeePerDay)}',
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),
               ),

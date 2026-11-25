@@ -83,6 +83,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(
+        // Staff header: dark maroon, as on the Dashboard.
+        backgroundColor: AppColors.maroonDeep,
+        showLogo: false, // no hanger mark on staff headers
         title: 'Reports',
         actions: [
           IconButton(

@@ -1,7 +1,7 @@
 // Shop-side redesign (Phase 2) layout checks on a 360 px phone, no Supabase:
 //   * the staff booking card (photo, customer, dates, chip, paid / balance)
 //   * the inventory grid card (condition chip, price, Edit)
-//   * a dashboard summary tile (count, label, View)
+//   * a dashboard summary tile (count, label; the tile is the button)
 //   * the sticky bar with outlined secondary buttons above the main one
 // Each must lay out without overflow (long names included).
 // Run with: flutter test test/features/shop_redesign_layout_test.dart
@@ -106,9 +106,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('dashboard summary tile shows count, label and View', (
-    tester,
-  ) async {
+  testWidgets('dashboard summary tile shows count and label', (tester) async {
     final future = Future.value([
       DashboardBooking.fromMap(_row),
       DashboardBooking.fromMap(_row),
@@ -129,7 +127,7 @@ void main() {
     await tester.pump();
     expect(find.text('2'), findsOneWidget);
     expect(find.text(DashboardSection.pickupsToday.title), findsOneWidget);
-    expect(find.text('View'), findsOneWidget);
+    // Design: no "View" text; the whole tile is the button.
     expect(tester.takeException(), isNull);
   });
 

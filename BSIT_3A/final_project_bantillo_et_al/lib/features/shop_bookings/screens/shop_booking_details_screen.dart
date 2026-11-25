@@ -214,6 +214,9 @@ class _ShopBookingDetailsScreenState extends State<ShopBookingDetailsScreen> {
       // Customer redesign 2: shared header with the Orange 150 mark (H4):
       // only the title and the reference number.
       appBar: BrandAppBar(
+        // Staff header: dark maroon, as on the Dashboard.
+        backgroundColor: AppColors.maroonDeep,
+        showLogo: false, // no hanger mark on staff headers
         titleWidget: _HeaderTitle(reference: _booking?.booking.referenceNo),
       ),
       body: body,

@@ -9,6 +9,12 @@
 //   const ContactShopButton()                 // text button
 //   const ContactShopButton(outlined: true)   // outlined, e.g. on a card
 //
+// Shop settings (0016): the address, contact numbers and GCash number now
+// come from ShopSettingsService (the owner can change them), with the
+// shop_contact.dart values until they load or if loading fails. The shop
+// hours are shown too when the owner has set them. The shop name stays
+// ShopContact.name.
+//
 // OWNER: team lead. Change only via a reviewed PR.
 
 import 'package:flutter/material.dart';
@@ -16,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:orange150_rental/core/config/shop_contact.dart';
+import 'package:orange150_rental/core/services/shop_settings_service.dart';
 
 /// A button with a support icon that opens [showContactShopDialog].
 class ContactShopButton extends StatelessWidget {
@@ -93,23 +100,34 @@ Future<void> showContactShopDialog(BuildContext context) {
       return AlertDialog(
         icon: const Icon(Icons.support_agent),
         title: const Text('Contact the shop'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(ShopContact.name, style: theme.textTheme.titleSmall),
-              const SizedBox(height: 4),
-              Text(ShopContact.address),
-              const SizedBox(height: 16),
-              Text('Call or text', style: theme.textTheme.labelLarge),
-              for (final number in ShopContact.phones)
-                numberRow(number, canCall: true),
-              const SizedBox(height: 8),
-              Text('GCash (payments)', style: theme.textTheme.labelLarge),
-              numberRow(ShopContact.gcash, canCall: false),
-            ],
-          ),
+        // Redraws when the shop settings arrive.
+        content: ListenableBuilder(
+          listenable: ShopSettingsService.instance..ensureLoaded(),
+          builder: (context, _) {
+            final settings = ShopSettingsService.instance.current;
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ShopContact.name, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(settings.address),
+                  if (settings.shopHours != null) ...[
+                    const SizedBox(height: 4),
+                    Text('Open: ${settings.shopHours}'),
+                  ],
+                  const SizedBox(height: 16),
+                  Text('Call or text', style: theme.textTheme.labelLarge),
+                  for (final number in settings.contactNumbers)
+                    numberRow(number, canCall: true),
+                  const SizedBox(height: 8),
+                  Text('GCash (payments)', style: theme.textTheme.labelLarge),
+                  numberRow(settings.gcashNumber, canCall: false),
+                ],
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
