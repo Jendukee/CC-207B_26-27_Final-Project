@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/auth_guard.dart';
+import 'package:orange150_rental/core/router/navigator_keys.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/services/session_controller.dart';
 import 'package:orange150_rental/core/widgets/responsive_scaffold.dart';
@@ -37,8 +38,9 @@ import 'package:orange150_rental/features/shop_dashboard/shop_dashboard_routes.d
 
 /// Holds the app's [GoRouter].
 abstract final class AppRouter {
-  static final GlobalKey<NavigatorState> _rootKey =
-      GlobalKey<NavigatorState>(debugLabel: 'root');
+  // Shared root key (navigator_keys.dart) so feature routes can open a
+  // page on the root navigator (fixes the duplicate page key crash).
+  static final GlobalKey<NavigatorState> _rootKey = rootNavigatorKey;
 
   /// Customer tabs, in branch order.
   static const List<ResponsiveDestination> _customerTabs = [
@@ -126,8 +128,10 @@ abstract final class AppRouter {
 
       // Staff shell.
       StatefulShellRoute.indexedStack(
-        builder: (context, state, shell) =>
-            ResponsiveScaffold(navigationShell: shell, destinations: _staffTabs),
+        builder: (context, state, shell) => ResponsiveScaffold(
+          navigationShell: shell,
+          destinations: _staffTabs,
+        ),
         branches: [
           StatefulShellBranch(routes: shopDashboardRoutes),
           StatefulShellBranch(routes: shopCalendarRoutes),

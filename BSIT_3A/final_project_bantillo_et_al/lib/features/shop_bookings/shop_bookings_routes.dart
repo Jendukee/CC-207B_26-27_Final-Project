@@ -10,6 +10,7 @@
 
 import 'package:go_router/go_router.dart';
 
+import 'package:orange150_rental/core/router/navigator_keys.dart';
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/features/shop_bookings/models/shop_booking_filter.dart';
 import 'package:orange150_rental/features/shop_bookings/screens/record_payment_screen.dart';
@@ -35,6 +36,10 @@ final List<RouteBase> shopBookingsRoutes = [
       GoRoute(
         path: RoutePaths.recordPayment,
         name: RouteNames.recordPayment,
+        // Full screen on the root navigator: it is also opened from the
+        // full-screen checklists, and pushing a shell page from there
+        // crashed with duplicate page keys ("!keyReservation.contains").
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) =>
             RecordPaymentScreen(bookingId: state.pathParameters['bookingId']!),
       ),
