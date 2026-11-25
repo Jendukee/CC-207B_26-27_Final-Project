@@ -10,8 +10,9 @@ import 'package:orange150_rental/features/auth/screens/login_screen.dart';
 import 'package:orange150_rental/features/auth/screens/register_screen.dart';
 import 'package:orange150_rental/features/auth/screens/splash_screen.dart';
 
-/// Auth routes. Query params: `from` (return path), `staff=1` (staff login),
-/// `reason` (why sign-in is needed, e.g. favorites).
+/// Auth routes. Query params: `from` (return path), `reason` (why sign-in
+/// is needed, e.g. favorites). Single login: the old `staff=1` staff mode
+/// is gone; customers and staff use the same Login.
 final List<RouteBase> authRoutes = [
   GoRoute(
     path: RoutePaths.splash,
@@ -23,7 +24,6 @@ final List<RouteBase> authRoutes = [
     name: RouteNames.login,
     builder: (context, state) => LoginScreen(
       from: state.uri.queryParameters['from'],
-      staffMode: state.uri.queryParameters['staff'] == '1',
       // Customer redesign 2: why sign-in is needed (LoginReasons).
       reason: state.uri.queryParameters[LoginReasons.param],
     ),

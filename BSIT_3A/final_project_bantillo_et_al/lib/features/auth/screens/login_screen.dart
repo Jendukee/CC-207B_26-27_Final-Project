@@ -2,11 +2,14 @@
 //
 // - `from`: where to return after sign in (set by AuthGuard when a guest
 //   opens a protected route, e.g. Reserve or My Bookings).
-// - `staffMode`: opened from the "Staff sign in" link on the guest
-//   Profile tab. Same form, but a non-staff account gets a notice.
-// After sign in the user goes to `from` if it suits their role, else their
-// role's home (customer -> Browse, staff/owner -> Dashboard). Staff who
-// sign in from a customer page (e.g. the Profile tab) go to the Dashboard.
+// Single login: customers and shop staff sign in here the same way (the
+// old "Staff sign in" mode is gone). After sign in the role is reloaded
+// from `profiles` (SessionController), then AuthGuard.afterSignIn picks:
+//   * staff / owner -> Dashboard (`from` and pending favorites ignored)
+//   * customer -> `from` (e.g. the item they were reserving, with any
+//     pending favorite) or Browse
+//   * role could not be loaded -> stay here, "We couldn't load your
+//     account. Please try again." with a Retry (never guessed customer).
 //
 // Customer redesign 2 (Phase 1):
 // - BrandAppBar with a back arrow (BackOrHomeButton): the previous screen
@@ -31,6 +34,7 @@ import 'package:orange150_rental/core/utils/validators.dart';
 import 'package:orange150_rental/core/widgets/back_or_home_button.dart';
 import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/features/auth/services/auth_service.dart';
+import 'package:orange150_rental/shared/models/app_user.dart';
 
 /// Email/password sign-in form.
 class LoginScreen extends StatefulWidget {
@@ -38,18 +42,29 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen({
     super.key,
     this.from,
-    this.staffMode = false,
     this.reason,
+    this.roleLoader,
+    this.initialRoleError,
   });
 
   /// Location to return to after sign in.
   final String? from;
 
-  /// True when opened via "Staff sign in".
-  final bool staffMode;
-
   /// Why sign-in is needed (a [LoginReasons] value), or null.
   final String? reason;
+
+  /// Retry for a failed role load: reloads the role and returns the user,
+  /// or null if it still failed. Defaults to [SessionController.reload];
+  /// tests pass a fake (no Supabase).
+  final Future<AppUser?> Function()? roleLoader;
+
+  /// Show the role-load error on open. Defaults to
+  /// [SessionController.roleLookupFailed] (signed in, role unknown).
+  final bool? initialRoleError;
+
+  /// Shown when the user signed in but their role could not be loaded.
+  static const String roleErrorMessage =
+      "We couldn't load your account. Please try again.";
 
   /// The line shown at the top for [reason]; null for unknown reasons
   /// (only fixed texts are shown, never text taken from the link).
@@ -74,6 +89,49 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   String? _errorMessage;
 
+  /// Single login: signed in, but the role could not be loaded. Shows
+  /// [LoginScreen.roleErrorMessage] with a Retry instead of the form error.
+  bool _roleError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // E.g. the role failed on app start: say so here instead of guessing.
+    _roleError =
+        widget.initialRoleError ?? SessionController.instance.roleLookupFailed;
+  }
+
+  /// Reloads the role (Retry button).
+  Future<AppUser?> _loadRole() async {
+    if (widget.roleLoader != null) return widget.roleLoader!();
+    final session = SessionController.instance;
+    await session.reload();
+    return session.roleLookupFailed ? null : session.user;
+  }
+
+  /// Sends a signed-in user to the right side by role (AuthGuard).
+  void _goOn(GoRouter router, AppUser user) =>
+      router.go(AuthGuard.afterSignIn(user, widget.from));
+
+  /// Retry after "We couldn't load your account".
+  Future<void> _retryRole() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final router = GoRouter.of(context);
+    try {
+      final user = await _loadRole();
+      if (user != null) {
+        _goOn(router, user);
+      } else if (mounted) {
+        setState(() => _roleError = true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _roleError = true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -87,43 +145,26 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _busy = true;
       _errorMessage = null;
+      _roleError = false;
     });
 
     // Capture before the await: the guard may replace this screen.
-    final messenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
 
     try {
+      // signIn waits for SessionController.reload (role from profiles).
       final user = await _authService.signIn(
         email: _emailController.text,
         password: _passwordController.text,
       );
-      if (SessionController.instance.roleLookupFailed) {
-        // Signed in, but the role could not be read, so the app falls back
-        // to the customer screens. Say so instead of failing silently.
-        messenger.showSnackBar(
-          const SnackBar(
-            duration: Duration(seconds: 8),
-            content: Text(
-              'Signed in, but your account role could not be '
-              'loaded, so you are seeing the customer screens. Check your '
-              'connection, then sign out and sign in again.',
-            ),
-          ),
-        );
-      } else if (widget.staffMode && !(user?.role.isStaff ?? false)) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'This account does not have staff access. '
-              'You are signed in as a customer.',
-            ),
-          ),
-        );
+      if (user == null || SessionController.instance.roleLookupFailed) {
+        // Single login: role unknown -> stay here with a Retry; never
+        // fall back to the customer screens silently.
+        if (mounted) setState(() => _roleError = true);
+      } else {
+        // Staff/owner -> Dashboard; customer -> `from` or Browse.
+        _goOn(router, user);
       }
-      // Staff go to the Dashboard even if they signed in from a customer
-      // page such as the Profile tab (see AuthGuard.destinationFor).
-      router.go(AuthGuard.destinationFor(user, widget.from));
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = AuthService.friendlyError(error));
@@ -135,7 +176,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.staffMode ? 'Staff sign in' : 'Sign in';
+    // Single login: one title for everyone.
+    const title = 'Sign in';
     final reasonText = LoginScreen.reasonText(widget.reason);
     return Scaffold(
       // Shared header (H4) with a back arrow that always works (H3).
@@ -176,12 +218,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
                     ],
-                    Text(
-                      widget.staffMode
-                          ? 'Sign in with your Orange 150 staff account.'
-                          : 'Sign in to reserve and see your bookings.',
+                    // Single login: one subtitle for customers and staff.
+                    const Text(
+                      'Customers and shop staff sign in here.',
                       textAlign: TextAlign.center,
                     ),
+                    // Signed in, but the role could not be loaded.
+                    if (_roleError) ...[
+                      const SizedBox(height: 16),
+                      const _ErrorBanner(message: LoginScreen.roleErrorMessage),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _retryRole,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     TextFormField(
                       // UI audit #26: errors show once the user has touched the field.
@@ -237,20 +289,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               dimension: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(title),
+                          : const Text(title),
                     ),
                     const SizedBox(height: 12),
-                    if (!widget.staffMode)
-                      TextButton(
-                        // push: Back from Register returns here (H3).
-                        onPressed: () => context.pushNamed(
-                          RouteNames.register,
-                          queryParameters: {
-                            if (widget.from != null) 'from': widget.from!,
-                          },
-                        ),
-                        child: const Text('No account yet? Create one'),
+                    // Single login: always shown (staff mode is gone).
+                    TextButton(
+                      // push: Back from Register returns here (H3).
+                      onPressed: () => context.pushNamed(
+                        RouteNames.register,
+                        queryParameters: {
+                          if (widget.from != null) 'from': widget.from!,
+                        },
                       ),
+                      child: const Text('No account yet? Create one'),
+                    ),
                     // Always offered: leave without an account (H3).
                     TextButton(
                       onPressed: () => context.go(RoutePaths.browse),

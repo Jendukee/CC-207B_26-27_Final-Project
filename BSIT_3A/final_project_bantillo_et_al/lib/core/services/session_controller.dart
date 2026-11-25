@@ -31,8 +31,10 @@ class SessionController extends ChangeNotifier {
   bool _roleLookupFailed = false;
 
   /// True when the last attempt to read the user's role from `profiles`
-  /// failed (network error, missing table...). The user is then treated as
-  /// a customer, so the login screen warns about it.
+  /// failed (network error, missing table...).
+  /// Single login: a NEW sign-in whose role cannot be read is NOT treated
+  /// as a customer. [user] stays null, so the router keeps them on Login,
+  /// which shows "We couldn't load your account" with a Retry ([reload]).
   bool get roleLookupFailed => _roleLookupFailed;
 
   /// True after the saved session (if any) and role have been loaded.
@@ -94,7 +96,10 @@ class SessionController extends ChangeNotifier {
   }
 
   /// Loads the profile row (role, name, phone) for the current auth user.
-  /// If the profile cannot be read, the user is treated as a customer.
+  /// If the profile cannot be read (error), the user is NOT guessed to be
+  /// a customer (single login): a new user stays null and
+  /// [roleLookupFailed] is set. A user whose role was already loaded keeps
+  /// it (e.g. a failed "Refresh profile" does not sign them out).
   Future<void> _load() async {
     String? targetId;
     do {
@@ -111,18 +116,26 @@ class SessionController extends ChangeNotifier {
               .eq('id', authUser.id)
               .maybeSingle();
           if (profile == null) {
-            debugPrint('No profiles row for user ${authUser.id}; '
-                'treating them as a customer.');
+            debugPrint(
+              'No profiles row for user ${authUser.id}; '
+              'treating them as a customer.',
+            );
           }
         } catch (error) {
           failed = true;
           debugPrint('Could not load role from profiles: $error');
         }
-        loaded = AppUser.fromProfile(
-          profile,
-          id: authUser.id,
-          email: authUser.email,
-        );
+        if (!failed) {
+          loaded = AppUser.fromProfile(
+            profile,
+            id: authUser.id,
+            email: authUser.email,
+          );
+        } else if (_user?.id == authUser.id) {
+          // Same user, role already known: keep it.
+          loaded = _user;
+        }
+        // else: role unknown -> loaded stays null (Login shows Retry).
       }
       _user = loaded;
       _loadedForUserId = targetId;
