@@ -9,6 +9,10 @@
 //   PhoneFormField(controller: _phoneController)              // optional
 //   PhoneFormField(controller: _phoneController, isRequired: true)
 //
+// Shop settings: optional [labelText] (e.g. "GCash number *") and
+// [readOnly] (staff viewing the owner's settings). Left out, the field is
+// exactly as before.
+//
 // OWNER: team lead. Change only via a reviewed PR.
 
 import 'package:flutter/material.dart';
@@ -25,7 +29,20 @@ class PhoneFormField extends StatelessWidget {
     this.enabled = true,
     this.textInputAction = TextInputAction.next,
     this.onFieldSubmitted,
+    this.labelText,
+    this.readOnly = false,
+    this.onChanged,
   });
+
+  /// Custom label; null = "Mobile number *" / "Mobile number (optional)".
+  final String? labelText;
+
+  /// Shows the value without letting it be edited (still readable and
+  /// selectable, unlike a disabled field).
+  final bool readOnly;
+
+  /// Called on every change (e.g. to track unsaved edits).
+  final ValueChanged<String>? onChanged;
 
   /// Holds the typed number.
   final TextEditingController controller;
@@ -47,6 +64,8 @@ class PhoneFormField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       enabled: enabled,
+      readOnly: readOnly,
+      onChanged: onChanged,
       keyboardType: TextInputType.phone,
       inputFormatters: Validators.phoneFormatters,
       autofillHints: const [AutofillHints.telephoneNumber],
@@ -55,7 +74,9 @@ class PhoneFormField extends StatelessWidget {
       onFieldSubmitted: onFieldSubmitted,
       decoration: InputDecoration(
         // "*" marks required fields; optional ones say so.
-        labelText: isRequired ? 'Mobile number *' : 'Mobile number (optional)',
+        labelText:
+            labelText ??
+            (isRequired ? 'Mobile number *' : 'Mobile number (optional)'),
         helperText: Validators.phoneHelperText,
         prefixIcon: const Icon(Icons.phone_outlined),
       ),

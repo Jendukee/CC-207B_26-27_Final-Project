@@ -16,6 +16,16 @@
 // Heuristics: H4 consistency and standards (one header everywhere),
 // H8 aesthetic and minimalist design (small mark, short title).
 //
+// Staff dashboard design: optional [toolbarHeight], [backgroundColor] and
+// [titleTextStyle] let the Dashboard use its taller dark maroon header on
+// wide screens. Left out, the header looks exactly as before.
+//
+// [showLogo] false hides the mark (the staff screens: the Orange 150 logo
+// is already in the staff sidebar). Default true, so nothing else changes.
+//
+// [titleSpacing] moves the title left / right (the gap before it). Left
+// out, Flutter's default 16 px is used, as before.
+//
 // Example:
 //   appBar: const BrandAppBar(title: 'My Bookings'),
 //   appBar: BrandAppBar(title: 'Item details', actions: [heart]),
@@ -86,7 +96,29 @@ class BrandAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.bottom,
     this.elevation,
     this.scrolledUnderElevation,
+    this.toolbarHeight,
+    this.backgroundColor,
+    this.titleTextStyle,
+    this.showLogo = true,
+    this.titleSpacing,
   }) : assert(title != null || titleWidget != null);
+
+  /// Space before the title (after the back arrow, or from the left edge
+  /// when there is none), as in [AppBar.titleSpacing]. Null = Flutter's
+  /// default (16), so screens that leave it out look exactly as before.
+  final double? titleSpacing;
+
+  /// False hides the Orange 150 mark before the title.
+  final bool showLogo;
+
+  /// Header height; null = the standard [kToolbarHeight].
+  final double? toolbarHeight;
+
+  /// Header color; null = the theme's maroon.
+  final Color? backgroundColor;
+
+  /// Title style; null = the theme's.
+  final TextStyle? titleTextStyle;
 
   /// Screen title, e.g. "My Bookings".
   final String? title;
@@ -114,12 +146,17 @@ class BrandAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double? scrolledUnderElevation;
 
   @override
-  Size get preferredSize =>
-      Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
+  Size get preferredSize => Size.fromHeight(
+    (toolbarHeight ?? kToolbarHeight) + (bottom?.preferredSize.height ?? 0),
+  );
 
   @override
   Widget build(BuildContext context) {
     return AppBar(
+      toolbarHeight: toolbarHeight,
+      backgroundColor: backgroundColor,
+      titleTextStyle: titleTextStyle,
+      titleSpacing: titleSpacing,
       leading: leading,
       automaticallyImplyLeading: automaticallyImplyLeading,
       actions: actions,
@@ -128,8 +165,7 @@ class BrandAppBar extends StatelessWidget implements PreferredSizeWidget {
       scrolledUnderElevation: scrolledUnderElevation,
       title: Row(
         children: [
-          const BrandLogo(),
-          const SizedBox(width: 10),
+          if (showLogo) ...[const BrandLogo(), const SizedBox(width: 10)],
           // Flexible + ellipsis: a long title never pushes the actions off.
           Flexible(
             child:

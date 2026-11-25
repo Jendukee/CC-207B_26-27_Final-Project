@@ -773,7 +773,11 @@ class _ItemFormScreenState extends State<ItemFormScreen> {
         // Phase 2: light grey page under the white section cards (H4).
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
         // Customer redesign 2: shared header with the Orange 150 mark (H4).
-        appBar: BrandAppBar(title: _isEditing ? 'Edit Item' : 'Add Item'),
+        appBar: BrandAppBar(
+          title: _isEditing ? 'Edit Item' : 'Add Item',
+          backgroundColor: AppColors.maroonDeep, // as on the Dashboard
+          showLogo: false, // no hanger mark on staff headers
+        ),
         // Phase 2: Save in a sticky bar, only while the form is shown.
         bottomNavigationBar: _isLoading || _loadError != null
             ? null

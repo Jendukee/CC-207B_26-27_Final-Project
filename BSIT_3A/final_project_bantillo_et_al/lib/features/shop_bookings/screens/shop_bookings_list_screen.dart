@@ -21,6 +21,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:orange150_rental/core/router/route_names.dart';
 import 'package:orange150_rental/core/widgets/async_list_view.dart';
+import 'package:orange150_rental/core/theme/app_colors.dart';
 import 'package:orange150_rental/core/widgets/brand_app_bar.dart';
 import 'package:orange150_rental/core/widgets/empty_view.dart';
 import 'package:orange150_rental/core/widgets/list_skeleton.dart';
@@ -96,6 +97,10 @@ class _ShopBookingsListScreenState extends State<ShopBookingsListScreen> {
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
       appBar: BrandAppBar(
+        // Staff header: dark maroon, as on the Dashboard.
+        backgroundColor: AppColors.maroonDeep,
+        showLogo: false, // no hanger mark on staff headers
+        titleSpacing: 40, // same title position as the Dashboard
         title: 'Bookings',
         actions: [
           IconButton(

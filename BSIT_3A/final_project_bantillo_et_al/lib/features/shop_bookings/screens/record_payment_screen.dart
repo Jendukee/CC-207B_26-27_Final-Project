@@ -189,7 +189,11 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       // Customer redesign 2: shared header with the Orange 150 mark (H4).
-      appBar: const BrandAppBar(title: 'Record Payment'),
+      appBar: const BrandAppBar(
+        title: 'Record Payment',
+        backgroundColor: AppColors.maroonDeep, // as on the Dashboard
+        showLogo: false, // no hanger mark on staff headers
+      ),
       body: _buildBody(),
       // Customer redesign: the shared sticky bottom bar keeps Save payment
       // visible above the keyboard (same widget as the customer checkout).

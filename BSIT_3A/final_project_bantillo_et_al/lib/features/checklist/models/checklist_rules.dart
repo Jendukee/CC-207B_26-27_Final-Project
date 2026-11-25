@@ -3,7 +3,10 @@
 //   * which checkboxes to show (the garment itself + each inclusion)
 //   * when "Release items" is allowed
 //   * penalty validation (0 or more)
-//   * the late return fee (Phase 3): ₱200 per day after the return date
+//   * the late return fee (Phase 3): the shop's fee per day after the
+//     return date. Shop settings (0016): the rate is passed in as
+//     `perDay` (the owner's value from ShopSettingsService); left out, it
+//     is the old fixed ₱200 (RentalTerms.lateFeePerDay).
 // The save_checklist SQL function (0003) checks the same rules again.
 //
 // OWNER: Member 3.
@@ -144,13 +147,13 @@ abstract final class ChecklistRules {
     return days < 0 ? 0 : days;
   }
 
-  /// The late fee to pre-fill: [lateDays] x [RentalTerms.lateFeePerDay].
+  /// The late fee to pre-fill: [lateDays] x [perDay] (the shop's late fee
+  /// per day; default RentalTerms.lateFeePerDay).
   static double lateFee({
     required DateTime returnDate,
     required DateTime returnedOn,
-  }) =>
-      lateDays(returnDate: returnDate, returnedOn: returnedOn) *
-      RentalTerms.lateFeePerDay;
+    double perDay = RentalTerms.lateFeePerDay,
+  }) => lateDays(returnDate: returnDate, returnedOn: returnedOn) * perDay;
 
   /// How the pre-filled fee was worked out, shown under the penalty field:
   /// "2 days late (due Nov 25, 2026) × ₱200.00 = ₱400.00." or
@@ -158,13 +161,14 @@ abstract final class ChecklistRules {
   static String lateFeeExplanation({
     required DateTime returnDate,
     required DateTime returnedOn,
+    double perDay = RentalTerms.lateFeePerDay,
   }) {
     final days = lateDays(returnDate: returnDate, returnedOn: returnedOn);
     final due = Formatters.date(returnDate);
     if (days == 0) return 'Returned on time (due $due): no late fee.';
     return '$days ${days == 1 ? 'day' : 'days'} late (due $due) × '
-        '${Formatters.peso(RentalTerms.lateFeePerDay)} = '
-        '${Formatters.peso(days * RentalTerms.lateFeePerDay)}.';
+        '${Formatters.peso(perDay)} = '
+        '${Formatters.peso(days * perDay)}.';
   }
 
   /// The penalty field text for a fee: "400" or "0" (no trailing ".0").

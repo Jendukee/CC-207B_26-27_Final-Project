@@ -28,5 +28,7 @@ Each card has its own loading, empty ("Nothing scheduled today" for pick-ups and
 | `services/shop_dashboard_service.dart` | One query per card and friendly errors. |
 | `screens/shop_dashboard_screen.dart` | The dashboard. |
 | `screens/shop_more_screen.dart` | Account info, Reports, Settings / Staff placeholders, Sign out. |
-| `screens/shop_placeholder_screen.dart` | "Coming soon" page. |
-| `widgets/dashboard_section_card.dart` | One card with count, list and states. |
+| `screens/shop_settings_screen.dart` | Shop settings (owner edits, staff view; 0016). |
+| `screens/staff_accounts_screen.dart` | Staff accounts (owner only; 0015). |
+| `widgets/dashboard_glance_card.dart` | "Today at a glance" card: summary, View more, bookings, states. |
+| `widgets/dashboard_requests_panel.dart` | "New requests since yesterday" panel. |

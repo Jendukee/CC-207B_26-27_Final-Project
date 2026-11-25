@@ -74,10 +74,19 @@ class AuthService {
     return RegisterResult.signedIn;
   }
 
+  /// Shown when a disabled staff login tries to sign in.
+  static const String disabledAccountMessage =
+      'This account has been disabled. Contact the shop owner.';
+
   /// Turns any auth error into a message that is safe to show users.
   static String friendlyError(Object error) {
     if (error is AuthException) {
       final message = error.message.toLowerCase();
+      // Staff logins (manage-staff): the owner disabled the account, which
+      // bans it in Supabase Auth ("User is banned", code user_banned).
+      if (error.code == 'user_banned' || message.contains('banned')) {
+        return disabledAccountMessage;
+      }
       if (message.contains('invalid login')) {
         return 'Incorrect email or password.';
       }
