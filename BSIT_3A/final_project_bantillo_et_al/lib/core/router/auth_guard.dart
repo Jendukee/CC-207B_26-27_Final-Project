@@ -9,8 +9,9 @@
 //    any /shop route) go to Login?from=<where they were going>, and are
 //    returned there after signing in.
 // 4. Customers cannot open /shop routes; they are sent to Browse.
-// 5. Signed-in users who open Login/Register are sent on to `from`/home
-//    (same role check as rule 2).
+// 5. Signed-in users who open Login/Register are sent on (afterSignIn):
+//    staff / owner -> Dashboard (`from` ignored, single login),
+//    customer -> `from` (same role check as rule 2) or Browse.
 // 6. Staff and owners stay on the staff screens (/shop: Dashboard,
 //    Calendar, Bookings, Inventory, More, Reports, checklists). Opening
 //    any customer page (Browse, Assistant, Profile, My Bookings, Reserve)
@@ -45,6 +46,16 @@ abstract final class AuthGuard {
     return isStaff == isStaffPath ? safe : homeFor(user);
   }
 
+  /// Where to send [user] right after signing in on the single Login
+  /// screen. Staff and owners always land on the Dashboard: `from` links
+  /// and pending favorite saves (`?fav=`) are customer actions, so they
+  /// are ignored. Customers return to `from` (which carries any pending
+  /// favorite) or go to Browse, as before.
+  static String afterSignIn(AppUser? user, String? from) =>
+      (user?.role.isStaff ?? false)
+      ? RoutePaths.staffHome
+      : destinationFor(user, from);
+
   /// Returns [from] only if it is an in-app path (prevents open redirects).
   static String? safeFrom(String? from) {
     if (from == null || from.isEmpty) return null;
@@ -75,15 +86,18 @@ abstract final class AuthGuard {
       return destinationFor(session.user, from);
     }
 
-    // 5. Already signed in: skip Login/Register.
-    final isAuthPage =
-        path == RoutePaths.login || path == RoutePaths.register;
+    // 5. Already signed in: skip Login/Register. Single login: this is
+    //    also what moves a user on right after signing in, so it uses
+    //    afterSignIn (staff -> Dashboard, ignoring `from`). If the role
+    //    could not be loaded, user is null and they stay on Login.
+    final isAuthPage = path == RoutePaths.login || path == RoutePaths.register;
     if (isAuthPage) {
-      return session.isSignedIn ? destinationFor(session.user, from) : null;
+      return session.isSignedIn ? afterSignIn(session.user, from) : null;
     }
 
     final needsStaff = _isUnder(path, RoutePaths.shopPrefix);
-    final needsSignIn = needsStaff ||
+    final needsSignIn =
+        needsStaff ||
         RoutePaths.signInRequiredPrefixes.any((p) => _isUnder(path, p));
 
     // 3. Guests must sign in first.

@@ -5,7 +5,8 @@
 //   * list tiles: Favorites (customer redesign 2), Measurements, Contact
 //     details, Rental terms, Privacy and data (its own page), and Sign out
 //     (asks first, shown in red)
-// Guests see the sign-in prompt with the "Staff sign in" link.
+// Guests see the sign-in prompt (single login: no separate "Staff sign
+// in" link; staff and customers use the same Sign in).
 //
 // UI audit changes kept: friendly errors (#12), sign-out confirmation
 // (#17), shared Formatters (#23).
@@ -217,7 +218,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   'Sign in to see your bookings, measurements, contact '
                   'details and privacy settings.',
               from: RoutePaths.profile,
-              showStaffLink: true,
+              // Single login: no "Staff sign in" link; staff use the same
+              // Sign in button and are sent to the Dashboard by role.
             );
           }
           final userId = session.user!.id;

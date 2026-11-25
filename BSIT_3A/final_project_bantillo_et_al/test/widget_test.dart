@@ -67,4 +67,11 @@ void main() {
     expect(AuthGuard.destinationFor(customer, '/my-bookings'), '/my-bookings');
     expect(AuthGuard.destinationFor(customer, '/shop/dashboard'), '/browse');
   });
+
+  // Single login: right after signing in, staff always land on the
+  // Dashboard (destinationFor above still serves Splash deep links).
+  test('after sign in, staff go to the Dashboard even with a /shop link', () {
+    const staff = AppUser(id: 's1', role: UserRole.staff);
+    expect(AuthGuard.afterSignIn(staff, '/shop/bookings'), '/shop/dashboard');
+  });
 }
